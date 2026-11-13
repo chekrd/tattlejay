@@ -2,7 +2,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { toIcs } from './calendar.ts';
-import { type Place, WEB_DIST } from './config.ts';
+import { WEB_DIST } from './config.ts';
 import { CATEGORIES, type Category, RATING_VALUES, type Status } from './contract.ts';
 import { addDays, isDate, today } from './dates.ts';
 import type { Store } from './db.ts';
@@ -12,14 +12,15 @@ import { CAPTURED, type Pages } from './pages.ts';
 import type { Poller } from './poll.ts';
 import type { Source } from './sources/types.ts';
 import type { TasteService } from './taste.ts';
+import { VISIT_LABELS, type Visits } from './visit.ts';
 
 export interface AppDeps {
   store: Store;
   poller: Poller;
   taste: TasteService;
   pages: Pages;
+  visits: Visits;
   sources: () => Source[];
-  place: Place;
   timeZone: string;
   now: () => number;
 }
@@ -44,6 +45,7 @@ const RuleBody = z.object({ text: z.string().trim().min(2).max(80), verdict: z.e
 const PageBody = z.object({ url: z.string().min(1).max(2000), label: z.string().max(120).optional() });
 const CaptureBody = z.object({ url: z.string().max(2000).optional(), text: z.string().max(40_000).optional(), picture: z.string().max(12_000_000).optional() });
 const TokenBody = z.object({ token: z.string().min(1) });
+const VisitBody = z.object({ city: z.string().trim().min(2).max(80) });
 
 // A picture arrives as a data URL, as the browser reads a pasted or dropped image.
 function pictureOf(dataUrl: string | undefined): Picture | undefined {
@@ -53,9 +55,16 @@ function pictureOf(dataUrl: string | undefined): Picture | undefined {
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
-export function createApp({ store, poller, taste, pages, sources, place, timeZone, now }: AppDeps) {
+export function createApp({ store, poller, taste, pages, visits, sources, timeZone, now }: AppDeps) {
   const app = new Hono();
-  const labels = () => new Map([...sources().map((s): [string, string] => [s.id, s.label]), [CAPTURED.id, CAPTURED.label]]);
+  // A source read for a visited city is named by what it is, whichever city it was read for.
+  const labels = () => {
+    const known = new Map([...sources().map((s): [string, string] => [s.id, s.label]), [CAPTURED.id, CAPTURED.label]]);
+    return { get: (source: string) => known.get(source) ?? VISIT_LABELS.find(([prefix]) => source.startsWith(prefix))?.[1] };
+  };
+
+  // The place a request asks about; home when it names none or one that is not known.
+  const placeOf = (id: string | undefined) => visits.placeOf(Number(id ?? 0)) ?? visits.placeOf(0);
   const day = () => today(timeZone, new Date(now()));
 
   // The server has no login; it answers only pages loaded from this machine under its own name, so a website open in
@@ -67,12 +76,12 @@ export function createApp({ store, poller, taste, pages, sources, place, timeZon
 
   const opinions = (): Opinions => ({ ratings: store.ratings(), scores: store.scores(taste.profileVersion()), rules: store.rules() });
 
-  const list = (q: Partial<ListQuery> & Pick<ListQuery, 'from' | 'to'>) =>
-    listEvents(store.upcoming(q.from), labels(), opinions(), { categories: [], freeOnly: false, place, ...q });
+  const list = (q: Partial<ListQuery> & Pick<ListQuery, 'from' | 'to' | 'place'>) =>
+    listEvents(store.upcoming(q.from), labels(), opinions(), { categories: [], freeOnly: false, ...q });
 
   const status = (): Status => ({
     polling: poller.polling,
-    place: { name: place.name, radiusKm: place.radiusKm },
+    places: visits.places(),
     sources: sources().map((s) => ({ id: s.id, label: s.label, home: s.home, pageId: pages.pageIdOf(s.id), ...store.sourceState(s.id) })),
     taste: taste.status(),
   });
@@ -82,15 +91,31 @@ export function createApp({ store, poller, taste, pages, sources, place, timeZon
     const to = c.req.query('to') ?? (isDate(from) ? addDays(from, 6) : '');
     if (!isDate(from) || !isDate(to) || to < from) return c.json({ error: 'from and to must be dates, from first' }, 400);
     const categories = (c.req.queries('category') ?? []).filter((v): v is Category => CATEGORIES.some((known) => known === v));
-    const events = list({ from, to, categories, freeOnly: c.req.query('free') === '1', withHidden: c.req.query('hidden') === '1' });
+    const events = list({ from, to, categories, freeOnly: c.req.query('free') === '1', withHidden: c.req.query('hidden') === '1', place: placeOf(c.req.query('place')) });
     return c.json({ from, to, events });
   });
 
-  app.get('/api/plans', (c) => c.json({ events: list({ from: day(), to: FAR, savedOnly: true }) }));
+  // Plans are kept wherever they are.
+  app.get('/api/plans', (c) => c.json({ events: list({ from: day(), to: FAR, savedOnly: true, place: null }) }));
 
-  app.get('/api/picks', (c) => c.json(pickEvents(list({ from: day(), to: FAR }), day())));
+  app.get('/api/picks', (c) => c.json(pickEvents(list({ from: day(), to: FAR, place: placeOf(c.req.query('place')) }), day())));
 
-  app.get('/api/starter', (c) => c.json({ events: starterEvents(list({ from: day(), to: addDays(day(), STARTER_DAYS) }), STARTER_COUNT) }));
+  app.get('/api/starter', (c) =>
+    c.json({ events: starterEvents(list({ from: day(), to: addDays(day(), STARTER_DAYS), place: placeOf(c.req.query('place')) }), STARTER_COUNT) }),
+  );
+
+  app.post('/api/visit', async (c) => {
+    const body = VisitBody.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ error: 'name a city' }, 400);
+    try {
+      const visit = await visits.visit(body.data.city);
+      // The new events are scored at once: the person asked for this city now.
+      void taste.run();
+      return c.json(visit);
+    } catch (err) {
+      return c.json({ error: message(err) }, 422);
+    }
+  });
 
   app.put('/api/events/:id/rating', async (c) => {
     const body = RatingBody.safeParse(await c.req.json().catch(() => null));
@@ -101,7 +126,7 @@ export function createApp({ store, poller, taste, pages, sources, place, timeZon
 
   app.get('/api/events/:id/calendar.ics', (c) => {
     const id = Number(c.req.param('id'));
-    const event = list({ from: day(), to: FAR, withHidden: true }).find((e) => e.id === id);
+    const event = list({ from: day(), to: FAR, withHidden: true, place: null }).find((e) => e.id === id);
     if (!event) return c.json({ error: 'no such event' }, 404);
     return c.body(toIcs(event, timeZone, now()), 200, {
       'content-type': 'text/calendar; charset=utf-8',

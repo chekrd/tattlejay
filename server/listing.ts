@@ -5,12 +5,18 @@ import type { RatedEvent, Score, StoredRecord } from './db.ts';
 import { distanceM } from './geo.ts';
 import { titleKey } from './text.ts';
 
+export interface ListedPlace extends Pick<Place, 'lat' | 'lon' | 'radiusKm'> {
+  // 0 is home.
+  id: number;
+}
+
 export interface ListQuery {
   from: string;
   to: string;
   categories: Category[];
   freeOnly: boolean;
-  place: Place;
+  // Null lists events wherever they are.
+  place: ListedPlace | null;
   // Disliked events and those under a "never" rule are left out unless asked for.
   withHidden?: boolean;
   savedOnly?: boolean;
@@ -63,7 +69,12 @@ const first = <T>(records: StoredRecord[], pick: (r: StoredRecord) => T | null):
   return null;
 };
 
-function links(records: StoredRecord[], when: When, labels: Map<string, string>): EventSourceLink[] {
+// Anything that names a source: a Map does.
+export interface Labels {
+  get(source: string): string | undefined;
+}
+
+function links(records: StoredRecord[], when: When, labels: Labels): EventSourceLink[] {
   const bySource = new Map<string, StoredRecord[]>();
   for (const r of records) {
     const group = bySource.get(r.source);
@@ -81,9 +92,15 @@ function ruleFor(rules: Rule[], title: string, venue: string | null, verdict: Ru
   return rules.find((rule) => rule.verdict === verdict && titleKey(rule.text) !== '' && haystack.includes(` ${titleKey(rule.text)} `));
 }
 
-function view(records: StoredRecord[], labels: Map<string, string>, opinions: Opinions, q: ListQuery): EventView | undefined {
-  const placed = records.filter((r) => r.lat !== null && r.lon !== null);
-  if (placed.length > 0 && !placed.some((r) => distanceM(q.place.lat, q.place.lon, r.lat!, r.lon!) <= q.place.radiusKm * 1000)) return undefined;
+function view(records: StoredRecord[], labels: Labels, opinions: Opinions, q: ListQuery): EventView | undefined {
+  const { place } = q;
+  if (place) {
+    // An event is here when a source puts it within reach, or, when no source says where it is, when one of them was
+    // read for this place.
+    const placed = records.filter((r) => r.lat !== null && r.lon !== null);
+    const here = placed.length > 0 ? placed.some((r) => distanceM(place.lat, place.lon, r.lat!, r.lon!) <= place.radiusKm * 1000) : records.some((r) => r.placeId === place.id);
+    if (!here) return undefined;
+  }
 
   const ahead = mergeOccurrences(records.flatMap((r) => r.occurrences)).filter((o) => o.endDate >= q.from);
   const inRange = ahead.filter((o) => o.startDate <= q.to);
@@ -126,7 +143,7 @@ function view(records: StoredRecord[], labels: Map<string, string>, opinions: Op
 }
 
 // `records` must arrive grouped by event, as Store.upcoming returns them.
-export function listEvents(records: StoredRecord[], labels: Map<string, string>, opinions: Opinions, q: ListQuery): EventView[] {
+export function listEvents(records: StoredRecord[], labels: Labels, opinions: Opinions, q: ListQuery): EventView[] {
   const events: EventView[] = [];
   let group: StoredRecord[] = [];
   const flush = () => {

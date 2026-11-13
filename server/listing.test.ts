@@ -5,6 +5,8 @@ import type { When } from './contract.ts';
 import type { StoredRecord } from './db.ts';
 import { type ListQuery, listEvents, mergeOccurrences, NO_OPINIONS, type Opinions, pickEvents, starterEvents } from './listing.ts';
 
+const HOME = { id: 0, ...PLACE };
+
 const on = (startDate: string, startTime: string | null = null, endDate = startDate, endTime: string | null = null): When => ({ startDate, startTime, endDate, endTime });
 
 let nextId = 1;
@@ -23,11 +25,12 @@ const record = (eventId: number, over: Partial<StoredRecord> = {}): StoredRecord
   isFree: null,
   url: `https://example.test/${eventId}`,
   description: null,
+  placeId: 0,
   occurrences: [on('2026-11-14')],
   ...over,
 });
 
-const query = (over: Partial<ListQuery> = {}): ListQuery => ({ from: '2026-11-13', to: '2026-11-19', categories: [], freeOnly: false, place: PLACE, ...over });
+const query = (over: Partial<ListQuery> = {}): ListQuery => ({ from: '2026-11-13', to: '2026-11-19', categories: [], freeOnly: false, place: HOME, ...over });
 const labels = new Map([['city', 'City']]);
 
 test('a day with times replaces the same day without one', () => {
@@ -80,8 +83,16 @@ test('filters by category, price and place', () => {
   ];
   const ids = (q: Partial<ListQuery>) => listEvents(records, labels, NO_OPINIONS, query(q)).map((e) => e.id);
   assert.deepEqual(ids({}), [1, 2, 4]);
+  assert.deepEqual(ids({ place: null }), [1, 2, 3, 4]);
   assert.deepEqual(ids({ categories: ['Film', 'Sport'] }), [1]);
   assert.deepEqual(ids({ freeOnly: true }), [1]);
+});
+
+test('an event no source places belongs to the place it was read for', () => {
+  const records = [record(1, { lat: null, lon: null, placeId: 0 }), record(2, { lat: null, lon: null, placeId: 5 }), record(3, { lat: 49.59, lon: 17.25, placeId: 0 })];
+  const at = (place: ListQuery['place']) => listEvents(records, labels, NO_OPINIONS, query({ place })).map((e) => e.id);
+  assert.deepEqual(at(HOME), [1]);
+  assert.deepEqual(at({ id: 5, lat: 49.5938, lon: 17.2509, radiusKm: 30 }), [2, 3]);
 });
 
 test('links to the source record for the shown day', () => {

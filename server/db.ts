@@ -98,6 +98,21 @@ const MIGRATIONS = [
     ('https://rhkb.cz/sluzby/kalendar-akci', 'RHK Brno'),
     ('https://www.kudyznudy.cz/kalendar-akci?mesto=582786', 'Kudy z nudy');
   `,
+  // Cities looked at besides home. Their events sit in the same tables, set apart only by where they are.
+  `
+  CREATE TABLE place (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    lat REAL NOT NULL,
+    lon REAL NOT NULL,
+    radius_km REAL NOT NULL,
+    visited_at INTEGER NOT NULL
+  );
+  `,
+  // Which place a record was read for: 0 is home. An event that gives no coordinates belongs to that place alone.
+  `
+  ALTER TABLE record ADD COLUMN place_id INTEGER NOT NULL DEFAULT 0;
+  `,
 ];
 
 function migrate(db: DatabaseSync) {
@@ -134,7 +149,16 @@ export interface StoredRecord {
   isFree: boolean | null;
   url: string;
   description: string | null;
+  placeId: number;
   occurrences: When[];
+}
+
+export interface VisitedPlace {
+  id: number;
+  name: string;
+  lat: number;
+  lon: number;
+  radiusKm: number;
 }
 
 export interface PageSource {
@@ -204,13 +228,14 @@ export function openStore(path: string) {
   const createEvent = db.prepare('INSERT INTO event (first_seen_at) VALUES (?)');
   const saveRecord = db.prepare(`
     INSERT INTO record (event_id, source, key, title, title_key, venue, address, lat, lon, category, tags, price_text,
-      is_free, url, description, image_url, seen_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      is_free, url, description, image_url, seen_at, place_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT (source, key) DO UPDATE SET
       title = excluded.title, title_key = excluded.title_key, venue = excluded.venue, address = excluded.address,
       lat = excluded.lat, lon = excluded.lon, category = excluded.category, tags = excluded.tags,
       price_text = excluded.price_text, is_free = excluded.is_free, url = excluded.url,
-      description = excluded.description, image_url = excluded.image_url, seen_at = excluded.seen_at
+      description = excluded.description, image_url = excluded.image_url, seen_at = excluded.seen_at,
+      place_id = excluded.place_id
     RETURNING id
   `);
   const clearOccurrences = db.prepare('DELETE FROM occurrence WHERE record_id = ?');
@@ -224,7 +249,7 @@ export function openStore(path: string) {
   const deleteRecord = db.prepare('DELETE FROM record WHERE id = ?');
   const upcoming = db.prepare(`
     SELECT r.id, r.event_id, r.source, r.title, r.venue, r.address, r.lat, r.lon, r.category, r.tags, r.price_text,
-      r.is_free, r.url, r.description, o.start_date, o.start_time, o.end_date, o.end_time
+      r.is_free, r.url, r.description, r.place_id, o.start_date, o.start_time, o.end_date, o.end_time
     FROM record r JOIN occurrence o ON o.record_id = r.id
     WHERE o.end_date >= ?
     ORDER BY r.event_id, r.id
@@ -241,6 +266,13 @@ export function openStore(path: string) {
     'SELECT DISTINCT r.event_id FROM record r JOIN occurrence o ON o.record_id = r.id WHERE o.end_date >= ?',
   );
   const ratings = db.prepare('SELECT event_id, value, title, venue, category, tags FROM rating ORDER BY at');
+  const places = db.prepare('SELECT id, name, lat, lon, radius_km FROM place ORDER BY visited_at DESC');
+  const savePlace = db.prepare(`
+    INSERT INTO place (name, lat, lon, radius_km, visited_at) VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT (name) DO UPDATE SET lat = excluded.lat, lon = excluded.lon, radius_km = excluded.radius_km,
+      visited_at = excluded.visited_at
+    RETURNING id
+  `);
   const pageSources = db.prepare('SELECT id, url, label, page_hash, items FROM page_source ORDER BY id');
   const addPageSource = db.prepare('INSERT INTO page_source (url, label) VALUES (?, ?)');
   const keepPage = db.prepare('UPDATE page_source SET page_hash = ?, items = ? WHERE id = ?');
@@ -267,6 +299,11 @@ export function openStore(path: string) {
   const setSetting = db.prepare('INSERT INTO setting (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value');
 
   return {
+    places: (): VisitedPlace[] =>
+      places.all().map((r) => ({ id: Number(r.id), name: String(r.name), lat: Number(r.lat), lon: Number(r.lon), radiusKm: Number(r.radius_km) })),
+
+    savePlace: (place: Omit<VisitedPlace, 'id'>, now: number) => Number(savePlace.get(place.name, place.lat, place.lon, place.radiusKm, now)?.id),
+
     pageSources(): PageSource[] {
       return pageSources.all().map((r) => ({ id: Number(r.id), url: String(r.url), label: String(r.label), pageHash: text(r.page_hash), items: text(r.items) }));
     },
@@ -364,7 +401,7 @@ export function openStore(path: string) {
 
     createEvent: (now: number) => Number(createEvent.run(now).lastInsertRowid),
 
-    saveRecord(eventId: number, source: string, item: SourceItem, titleKey: string, now: number) {
+    saveRecord(eventId: number, source: string, item: SourceItem, titleKey: string, now: number, placeId: number) {
       const row = saveRecord.get(
         eventId,
         source,
@@ -383,6 +420,7 @@ export function openStore(path: string) {
         item.description,
         item.imageUrl,
         now,
+        placeId,
       );
       const id = Number(row?.id);
       clearOccurrences.run(id);
@@ -424,6 +462,7 @@ export function openStore(path: string) {
             isFree: r.is_free == null ? null : Number(r.is_free) === 1,
             url: String(r.url),
             description: text(r.description),
+            placeId: Number(r.place_id),
             occurrences: [],
           };
           records.push(last);

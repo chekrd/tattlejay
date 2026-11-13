@@ -90,9 +90,22 @@ export interface TasteStatus {
   error: string | null;
 }
 
+// Home is place 0; the others are cities looked at since.
+export interface PlaceView {
+  id: number;
+  name: string;
+  radiusKm: number;
+}
+
+// What looking at another city found, source by source.
+export interface Visit {
+  place: PlaceView;
+  found: { label: string; count: number; note: string | null }[];
+}
+
 export interface Status {
   polling: boolean;
-  place: { name: string; radiusKm: number };
+  places: PlaceView[];
   sources: SourceStatus[];
   taste: TasteStatus;
 }

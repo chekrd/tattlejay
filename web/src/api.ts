@@ -1,10 +1,11 @@
-import type { Capture, Category, EventView, PagePreview, Picks, RatingValue, Rule, Status, Taste } from '../../server/contract.ts';
+import type { Capture, Category, EventView, PagePreview, Picks, RatingValue, Rule, Status, Taste, Visit } from '../../server/contract.ts';
 import type { Range } from './dates.ts';
 
 export interface EventQuery extends Range {
   categories: Category[];
   freeOnly: boolean;
   withHidden: boolean;
+  placeId: number;
 }
 
 async function json<T>(res: Response): Promise<T> {
@@ -21,7 +22,7 @@ const send = async <T>(method: string, path: string, body?: unknown) =>
   json<T>(await fetch(path, body === undefined ? { method } : { method, body: JSON.stringify(body), headers: { 'content-type': 'application/json' } }));
 
 export async function fetchEvents(q: EventQuery, signal: AbortSignal): Promise<EventView[]> {
-  const params = new URLSearchParams({ from: q.from, to: q.to });
+  const params = new URLSearchParams({ from: q.from, to: q.to, place: String(q.placeId) });
   for (const c of q.categories) params.append('category', c);
   if (q.freeOnly) params.set('free', '1');
   if (q.withHidden) params.set('hidden', '1');
@@ -30,7 +31,7 @@ export async function fetchEvents(q: EventQuery, signal: AbortSignal): Promise<E
 
 export const fetchPlans = async (signal: AbortSignal) => (await get<{ events: EventView[] }>('/api/plans', signal)).events;
 export const fetchStarter = async (signal: AbortSignal) => (await get<{ events: EventView[] }>('/api/starter', signal)).events;
-export const fetchPicks = (signal: AbortSignal) => get<Picks>('/api/picks', signal);
+export const fetchPicks = (placeId: number, signal: AbortSignal) => get<Picks>(`/api/picks?place=${placeId}`, signal);
 export const fetchTaste = (signal: AbortSignal) => get<Taste>('/api/taste', signal);
 export const fetchStatus = (signal: AbortSignal) => get<Status>('/api/status', signal);
 
@@ -46,3 +47,4 @@ export const addPage = (url: string, label: string) => send<Status>('POST', '/ap
 export const removePage = (id: number) => send<Status>('DELETE', `/api/sources/${id}`);
 export const capture = (from: { url?: string; text?: string; picture?: string }) => send<Capture>('POST', '/api/capture', from);
 export const addCapture = (token: string) => send<unknown>('POST', '/api/capture/add', { token });
+export const visit = (city: string) => send<Visit>('POST', '/api/visit', { city });

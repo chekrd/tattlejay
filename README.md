@@ -82,5 +82,14 @@ it gave last time and says what went wrong.
 A page added by address gives its nearest events only (whatever one page shows), and an event read by the model has
 no map position unless its venue is already known from another source.
 
+### Another city
+
+The place menu under the title has **Another city…**. Name one and the app reads, once and on the spot, what the
+sources that cover many cities list for it over the next month: GoOut, wherever it has events, and Kudy z nudy for
+the Czech regional capitals. The events are scored against your taste and the listing switches to that city; the
+menu switches back. A city stays in the menu, and looking at it again refreshes it.
+
+Other cities get no sources of their own, so expect less there than at home.
+
 The GoOut and Meetup adapters read data those sites embed for their own pages, not a published API. Keep this app
 private.

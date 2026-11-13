@@ -73,6 +73,7 @@ interface Props {
   today: string;
   status: Status | null;
   revision: number;
+  placeId: number;
   onChanged: () => void;
   onRefreshPicks: () => void;
 }

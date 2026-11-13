@@ -22,11 +22,12 @@ interface Shared {
   today: string;
   status: Status | null;
   revision: number;
+  placeId: number;
   onChanged: () => void;
 }
 
-function PickedForYou({ today, status, revision, onChanged, onOpenTaste, onRefreshPicks }: Shared & { onOpenTaste: () => void; onRefreshPicks: () => void }) {
-  const picks = useLoad(fetchPicks, `picks ${revision}`);
+function PickedForYou({ today, status, revision, placeId, onChanged, onOpenTaste, onRefreshPicks }: Shared & { onOpenTaste: () => void; onRefreshPicks: () => void }) {
+  const picks = useLoad((signal) => fetchPicks(placeId, signal), `picks ${placeId} ${revision}`);
   const taste = status?.taste;
   if (!taste) return null;
 
@@ -114,7 +115,7 @@ function Days({ events, today, onChanged, marksUnscored }: { events: EventView[]
 }
 
 export function WhatsOn(props: Shared & { onOpenTaste: () => void; onRefreshPicks: () => void }) {
-  const { today, status, revision, onChanged } = props;
+  const { today, status, revision, placeId, onChanged } = props;
   const [preset, setPreset] = useState<Preset>('week');
   const [custom, setCustom] = useState<Range>({ from: today, to: addDays(today, 30) });
   const [categories, setCategories] = useState<Category[]>([]);
@@ -122,7 +123,7 @@ export function WhatsOn(props: Shared & { onOpenTaste: () => void; onRefreshPick
   const [withHidden, setWithHidden] = useState(false);
 
   const range = preset === 'range' ? custom : presetRange(preset, today);
-  const query = { ...range, categories, freeOnly, withHidden };
+  const query = { ...range, categories, freeOnly, withHidden, placeId };
   const listing = useLoad((signal) => fetchEvents(query, signal), `events ${JSON.stringify(query)} ${revision}`);
 
   const toggle = (category: Category) =>

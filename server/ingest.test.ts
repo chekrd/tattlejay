@@ -6,6 +6,8 @@ import { ingest } from './ingest.ts';
 import { listEvents, NO_OPINIONS } from './listing.ts';
 import type { SourceItem } from './sources/types.ts';
 
+const HOME = { id: 0, ...PLACE };
+
 const at = { today: '2026-11-13', now: 1 };
 const labels = new Map([
   ['city', 'City'],
@@ -29,7 +31,7 @@ const item = (over: Partial<SourceItem> & { key: string; title: string }, date =
 });
 
 const listing = (store: ReturnType<typeof openStore>) =>
-  listEvents(store.upcoming('2026-11-13'), labels, NO_OPINIONS, { from: '2026-11-13', to: '2027-11-13', categories: [], freeOnly: false, place: PLACE });
+  listEvents(store.upcoming('2026-11-13'), labels, NO_OPINIONS, { from: '2026-11-13', to: '2027-11-13', categories: [], freeOnly: false, place: HOME });
 
 test('one production listed on several days is one event', () => {
   const store = openStore(':memory:');

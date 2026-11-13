@@ -602,3 +602,36 @@ button.small {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+.where {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 4px;
+}
+
+.where select {
+  padding: 3px 8px;
+  font-size: 0.9rem;
+  color: var(--soft);
+  background: var(--card);
+}
+
+.where form {
+  display: flex;
+  gap: 6px;
+}
+
+.where input {
+  padding: 3px 10px;
+  font-size: 0.9rem;
+  width: 15rem;
+  max-width: 60vw;
+}
+
+.where .note {
+  margin: 0;
+  flex-basis: 100%;
+  font-size: 0.85rem;
+}

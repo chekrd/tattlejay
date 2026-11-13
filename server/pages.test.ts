@@ -6,6 +6,8 @@ import { listEvents, NO_OPINIONS } from './listing.ts';
 import type { Picture } from './model.ts';
 import { CAPTURED, createPages, pageSourceId } from './pages.ts';
 
+const HOME = { id: 0, ...PLACE };
+
 const NOW = Date.parse('2026-11-13T09:00:00Z');
 const found = (title: string, date: string, time: string | null = '19:00') => JSON.stringify([{ title, startDate: date, startTime: time, venue: 'Sál', category: 'Music', url: '/a' }]);
 
@@ -30,8 +32,8 @@ function setup(pagesByUrl: Record<string, string>, reply: (prompt: string, pictu
     timeZone: TIME_ZONE,
   });
   const listing = () =>
-    listEvents(store.upcoming('2026-11-13'), new Map([[CAPTURED.id, CAPTURED.label]]), NO_OPINIONS, { from: '2026-11-13', to: '2027-11-13', categories: [], freeOnly: false, place: PLACE });
-  const context = { fetch: fetcher, pause: async () => {}, today: '2026-11-13', place: PLACE };
+    listEvents(store.upcoming('2026-11-13'), new Map([[CAPTURED.id, CAPTURED.label]]), NO_OPINIONS, { from: '2026-11-13', to: '2027-11-13', categories: [], freeOnly: false, place: HOME });
+  const context = { fetch: fetcher, pause: async () => {}, today: '2026-11-13', place: HOME };
   return { store, pages, asked, fetched, listing, context };
 }
 

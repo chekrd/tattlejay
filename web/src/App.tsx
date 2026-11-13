@@ -3,6 +3,7 @@ import type { Status } from '../../server/contract.ts';
 import { requestPicks, requestRefresh } from './api.ts';
 import { agoLabel, localDay } from './dates.ts';
 import { useStatus } from './hooks.ts';
+import { PlacePicker } from './PlacePicker.tsx';
 import { Plans } from './Plans.tsx';
 import { Sources } from './Sources.tsx';
 import { TastePanel } from './TastePanel.tsx';
@@ -43,6 +44,8 @@ function SourcesLine({ status, onRefresh }: { status: Status; onRefresh: () => v
 export function App() {
   const today = localDay(new Date());
   const [tab, setTab] = useState<Tab>('on');
+  // 0 is home; another number is a city being visited.
+  const [placeId, setPlaceId] = useState(0);
   // Bumped whenever something the lists show may have changed: a rating, a saved setting, finished background work.
   const [revision, setRevision] = useState(0);
   const changed = () => setRevision((n) => n + 1);
@@ -50,18 +53,14 @@ export function App() {
 
   const refreshSources = () => void requestRefresh().then(setStatus).catch(() => {});
   const refreshPicks = () => void requestPicks().then(setStatus).catch(() => {});
-  const shared = { today, status, revision, onChanged: changed };
+  const shared = { today, status, revision, placeId, onChanged: changed };
 
   return (
     <div className="page">
       <header>
         <div>
           <h1>Tattlejay</h1>
-          {status && (
-            <p className="where">
-              {status.place.name} + {status.place.radiusKm} km
-            </p>
-          )}
+          {status && <PlacePicker places={status.places} placeId={placeId} onPick={setPlaceId} onChanged={changed} />}
         </div>
         {status && <SourcesLine status={status} onRefresh={refreshSources} />}
       </header>

@@ -8,6 +8,7 @@ import { createPages } from './pages.ts';
 import { createPoller } from './poll.ts';
 import { SOURCES } from './sources/index.ts';
 import { createTaste } from './taste.ts';
+import { createVisits } from './visit.ts';
 
 process.on('unhandledRejection', (err) => console.error('unhandled rejection', err));
 
@@ -15,6 +16,7 @@ const store = openStore(DB_PATH);
 const ask = claudeCli({ command: CLAUDE_COMMAND, cwd: CLAUDE_CWD, model: CLAUDE_MODEL, timeoutMs: CLAUDE_TIMEOUT_MS });
 const taste = createTaste(store, { ask, now: Date.now, timeZone: TIME_ZONE });
 const pages = createPages(store, { ask, fetch, now: Date.now, timeZone: TIME_ZONE });
+const visits = createVisits(store, { ask, fetch, pause: (ms) => pause(ms), now: Date.now, timeZone: TIME_ZONE, home: PLACE });
 // The built-in sources first, so the pages added by address merge into their events.
 const sources = () => [...SOURCES, ...pages.sources()];
 const poller = createPoller(store, sources, {
@@ -29,7 +31,7 @@ const poller = createPoller(store, sources, {
     if (taste.due()) void taste.run();
   },
 });
-const app = createApp({ store, poller, taste, pages, sources, place: PLACE, timeZone: TIME_ZONE, now: Date.now });
+const app = createApp({ store, poller, taste, pages, visits, sources, timeZone: TIME_ZONE, now: Date.now });
 
 serve({ fetch: app.fetch, hostname: HOST, port: PORT }, () => {
   console.log(`tattlejay listening on http://${HOST}:${PORT}`);

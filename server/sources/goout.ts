@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { TIME_ZONE, USER_AGENT } from '../config.ts';
 import type { Category, When } from '../contract.ts';
 import { addDays, localDateTime } from '../dates.ts';
-import { collapse } from '../text.ts';
+import { collapse, titleKey } from '../text.ts';
 import type { FetchContext, FetchResult, Source, SourceItem } from './types.ts';
 
 // Not a published API: the endpoint goout.net's own pages call. Only facts are kept (title, time, venue, price, link);
@@ -175,8 +175,14 @@ function keep<T extends { id: number }>(into: Map<number, T>, schema: z.ZodType<
   }
 }
 
-async function fetchItems({ fetch, pause, today, place }: FetchContext): Promise<FetchResult> {
-  const horizon = addDays(today, HORIZON_DAYS);
+export interface GooutLimits {
+  horizonDays: number;
+  maxPages: number;
+}
+
+// Reads one city's schedules, soonest first, until the horizon or the page limit.
+export async function readGoout({ fetch, pause, today }: Pick<FetchContext, 'fetch' | 'pause' | 'today'>, cityId: number, limits: GooutLimits): Promise<FetchResult> {
+  const horizon = addDays(today, limits.horizonDays);
   const schedules: GooutSchedule[] = [];
   const events = new Map<number, GooutEvent>();
   const venues = new Map<number, GooutVenue>();
@@ -184,11 +190,11 @@ async function fetchItems({ fetch, pause, today, place }: FetchContext): Promise
   let lastDay: string | null = null;
   let reachedEnd = false;
 
-  for (let page = 0; page < MAX_PAGES; page++) {
+  for (let page = 0; page < limits.maxPages; page++) {
     if (page > 0) await pause(PAUSE_MS);
     const params = new URLSearchParams([
       ['languages[]', 'cs'],
-      ['cityIds[]', String(place.gooutCityId)],
+      ['cityIds[]', String(cityId)],
       ['include', 'events,venues'],
       ['limit', String(LIMIT)],
     ]);
@@ -225,4 +231,42 @@ async function fetchItems({ fetch, pause, today, place }: FetchContext): Promise
   return { items: buildItems(schedules, events, venues), coveredUntil: reachedEnd ? null : lastDay };
 }
 
-export const goout: Source = { id: 'goout', label: 'GoOut', home: 'https://goout.net/cs/brno/akce/lezjyvlkk/', neverEmpty: true, fetchItems };
+// GoOut numbers its cities; a country's listing names the city of every venue in it. Finds the number of the city
+// called `name` by looking through the start of each country's listing.
+const CityList = z.object({
+  meta: z.object({ nextScrollId: z.string().nullish() }).nullish(),
+  included: z.object({ cities: z.array(z.object({ id: z.number(), locales: Locale({ name: z.string().nullish() }) })).nullish() }).nullish(),
+});
+
+export async function findGooutCity({ fetch, pause }: Pick<FetchContext, 'fetch' | 'pause'>, name: string, countries: string[], pagesPerCountry: number): Promise<number | undefined> {
+  const wanted = titleKey(name);
+  for (const country of countries) {
+    let scrollId: string | null = null;
+    for (let page = 0; page < pagesPerCountry; page++) {
+      await pause(PAUSE_MS);
+      const params = new URLSearchParams([
+        ['languages[]', 'cs'],
+        ['countryIsos[]', country],
+        ['include', 'cities'],
+        ['limit', String(LIMIT)],
+      ]);
+      if (scrollId) params.set('scrollId', scrollId);
+      const res = await fetch(`${ENDPOINT}?${params}`, { headers: { 'user-agent': USER_AGENT, accept: 'application/json' } });
+      if (!res.ok) break;
+      const body = CityList.parse(await res.json());
+      const city = body.included?.cities?.find((c) => titleKey(c.locales?.cs?.name ?? '') === wanted);
+      if (city) return city.id;
+      if (!body.meta?.nextScrollId || body.meta.nextScrollId === scrollId) break;
+      scrollId = body.meta.nextScrollId;
+    }
+  }
+  return undefined;
+}
+
+export const goout: Source = {
+  id: 'goout',
+  label: 'GoOut',
+  home: 'https://goout.net/cs/brno/akce/lezjyvlkk/',
+  neverEmpty: true,
+  fetchItems: (ctx) => readGoout(ctx, ctx.place.gooutCityId, { horizonDays: HORIZON_DAYS, maxPages: MAX_PAGES }),
+};

@@ -7,6 +7,7 @@ import { createPages } from './pages.ts';
 import { createPoller } from './poll.ts';
 import type { Source, SourceItem } from './sources/types.ts';
 import { createTaste } from './taste.ts';
+import { createVisits } from './visit.ts';
 
 const NOW = Date.parse('2026-11-13T09:00:00Z');
 
@@ -41,7 +42,8 @@ function setup(fetchItems: Source['fetchItems']) {
     timeZone: TIME_ZONE,
   });
   const pages = createPages(store, { ask: async () => '[]', fetch, now: () => NOW, timeZone: TIME_ZONE });
-  const app = createApp({ store, poller, taste, pages, sources, place: PLACE, timeZone: TIME_ZONE, now: () => NOW });
+  const visits = createVisits(store, { ask: async () => '[]', fetch, pause: async () => {}, now: () => NOW, timeZone: TIME_ZONE, home: PLACE });
+  const app = createApp({ store, poller, taste, pages, visits, sources, timeZone: TIME_ZONE, now: () => NOW });
   return { app, poller, store, taste };
 }
 

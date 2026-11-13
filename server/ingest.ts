@@ -56,7 +56,8 @@ function placeFinder(store: Store) {
   };
 }
 
-export function ingest(store: Store, source: string, result: FetchResult, at: { today: string; now: number }) {
+// `placeId` says which place the source was read for; home when left out.
+export function ingest(store: Store, source: string, result: FetchResult, at: { today: string; now: number; placeId?: number }) {
   return store.transaction(() => {
     const seen = new Set<string>();
     const placeOf = placeFinder(store);
@@ -71,7 +72,7 @@ export function ingest(store: Store, source: string, result: FetchResult, at: { 
         findEvent(store, source, item, key) ??
         findByTitleAndTime(store, source, item, key) ??
         store.createEvent(at.now);
-      store.saveRecord(eventId, source, item, key, at.now);
+      store.saveRecord(eventId, source, item, key, at.now, at.placeId ?? 0);
     }
     const removed = store.removeMissing(source, seen, at.today, result.coveredUntil);
     return { saved: seen.size, removed };
