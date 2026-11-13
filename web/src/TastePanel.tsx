@@ -2,7 +2,7 @@ import { type FormEvent, useState } from 'react';
 import type { Rule, Status, Taste } from '../../server/contract.ts';
 import { addRule, fetchStarter, fetchTaste, removeRule, saveTaste } from './api.ts';
 import { agoLabel, dayLabel } from './dates.ts';
-import { RatingButtons } from './EventCard.tsx';
+import { Linked, RatingButtons } from './EventCard.tsx';
 import { useLoad } from './hooks.ts';
 
 const STARTER_GOAL = 30;
@@ -120,9 +120,7 @@ export function TastePanel({ today, status, revision, onChanged, onRefreshPicks 
             {starter.data.map((event) => (
               <li key={event.id}>
                 <span className="what">
-                  <a href={event.sources[0]?.url} target="_blank" rel="noreferrer">
-                    {event.title}
-                  </a>
+                  <Linked url={event.sources[0]?.url}>{event.title}</Linked>
                   <span className="where">{[event.category, event.venue, dayLabel(event.when.startDate, today)].filter(Boolean).join(' · ')}</span>
                 </span>
                 <RatingButtons event={event} onChanged={onChanged} />

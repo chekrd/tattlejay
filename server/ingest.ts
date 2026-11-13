@@ -43,12 +43,28 @@ function findByTitleAndTime(store: Store, source: string, item: SourceItem, key:
   return undefined;
 }
 
+// A source that names a venue without saying where it is takes the venue's place from a source that does. The names
+// must match as whole words, so "divadlo Reduta" finds "Reduta" but "Art" does not find "Kino Art".
+function placeFinder(store: Store) {
+  let known: { key: string; lat: number; lon: number }[] | undefined;
+  return (venue: string): { lat: number; lon: number } | undefined => {
+    known ??= store.placedVenues().map((v) => ({ key: titleKey(v.venue), lat: v.lat, lon: v.lon }));
+    const key = titleKey(venue);
+    if (key.length < 5) return undefined;
+    const match = known.find((v) => v.key === key) ?? known.find((v) => v.key.length >= 5 && (` ${key} `.includes(` ${v.key} `) || ` ${v.key} `.includes(` ${key} `)));
+    return match && { lat: match.lat, lon: match.lon };
+  };
+}
+
 export function ingest(store: Store, source: string, result: FetchResult, at: { today: string; now: number }) {
   return store.transaction(() => {
     const seen = new Set<string>();
-    for (const item of result.items) {
-      if (seen.has(item.key)) continue;
-      seen.add(item.key);
+    const placeOf = placeFinder(store);
+    for (const given of result.items) {
+      if (seen.has(given.key)) continue;
+      seen.add(given.key);
+      const place = given.lat === null && given.venue ? placeOf(given.venue) : undefined;
+      const item = place ? { ...given, ...place } : given;
       const key = titleKey(item.title);
       const eventId =
         store.recordOf(source, item.key)?.eventId ??

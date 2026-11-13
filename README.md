@@ -46,6 +46,8 @@ pnpm check        # types, lint, tests
   precise time any source gave, and a link to each source. It also lays your ratings, rules and scores over the events
   and chooses the picks.
 - `server/taste.ts` keeps the taste profile and the scores; `server/model.ts` is the only place that calls the CLI.
+- `server/extract.ts` reads events off any page or text; `server/pages.ts` keeps the pages you added and the events
+  you captured.
 - `web/` is the page.
 
 ## Sources
@@ -66,6 +68,19 @@ pnpm check        # types, lint, tests
 
 The **Sources** view shows when each was last read and how many events it gave. A source that fails keeps the events
 it gave last time and says what went wrong.
+
+### Adding your own
+
+- **Add a source**: paste the address of a programme or events page. If the page publishes its events as structured
+  data, they are read from that. Otherwise the model reads the page text, and reads it again only when the text has
+  changed. You see what was found before the page is added; after that it is read once a day. Národní divadlo,
+  Filharmonie, JIC, Masarykova univerzita, RHK Brno and Kudy z nudy come added this way, and can be removed.
+- **Add one event**: paste a link or the event's text, or paste or drop a screenshot or poster. This is the way in
+  for Facebook and Instagram, which cannot be read automatically. The picture is read by the CLI's file-reading tool
+  in a folder that holds nothing else.
+
+A page added by address gives its nearest events only (whatever one page shows), and an event read by the model has
+no map position unless its venue is already known from another source.
 
 The GoOut and Meetup adapters read data those sites embed for their own pages, not a published API. Keep this app
 private.

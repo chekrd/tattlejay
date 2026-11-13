@@ -7,6 +7,8 @@ import { CATEGORIES, type Category, RATING_VALUES, type Status } from './contrac
 import { addDays, isDate, today } from './dates.ts';
 import type { Store } from './db.ts';
 import { type ListQuery, listEvents, type Opinions, pickEvents, starterEvents } from './listing.ts';
+import type { Picture } from './model.ts';
+import { CAPTURED, type Pages } from './pages.ts';
 import type { Poller } from './poll.ts';
 import type { Source } from './sources/types.ts';
 import type { TasteService } from './taste.ts';
@@ -15,7 +17,8 @@ export interface AppDeps {
   store: Store;
   poller: Poller;
   taste: TasteService;
-  sources: Source[];
+  pages: Pages;
+  sources: () => Source[];
   place: Place;
   timeZone: string;
   now: () => number;
@@ -38,10 +41,21 @@ const isLocal = (url: string | undefined) => {
 const RatingBody = z.object({ value: z.enum(RATING_VALUES).nullable() });
 const TasteBody = z.object({ seed: z.string().max(2000).optional(), profile: z.string().max(4000).optional() });
 const RuleBody = z.object({ text: z.string().trim().min(2).max(80), verdict: z.enum(['always', 'never']) });
+const PageBody = z.object({ url: z.string().min(1).max(2000), label: z.string().max(120).optional() });
+const CaptureBody = z.object({ url: z.string().max(2000).optional(), text: z.string().max(40_000).optional(), picture: z.string().max(12_000_000).optional() });
+const TokenBody = z.object({ token: z.string().min(1) });
 
-export function createApp({ store, poller, taste, sources, place, timeZone, now }: AppDeps) {
+// A picture arrives as a data URL, as the browser reads a pasted or dropped image.
+function pictureOf(dataUrl: string | undefined): Picture | undefined {
+  const m = /^data:image\/(png|jpeg|webp|gif);base64,(.+)$/.exec(dataUrl ?? '');
+  return m ? { data: Buffer.from(m[2]!, 'base64'), extension: m[1] === 'jpeg' ? 'jpg' : m[1]! } : undefined;
+}
+
+const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
+export function createApp({ store, poller, taste, pages, sources, place, timeZone, now }: AppDeps) {
   const app = new Hono();
-  const labels = new Map(sources.map((s) => [s.id, s.label]));
+  const labels = () => new Map([...sources().map((s): [string, string] => [s.id, s.label]), [CAPTURED.id, CAPTURED.label]]);
   const day = () => today(timeZone, new Date(now()));
 
   // The server has no login; it answers only pages loaded from this machine under its own name, so a website open in
@@ -54,12 +68,12 @@ export function createApp({ store, poller, taste, sources, place, timeZone, now 
   const opinions = (): Opinions => ({ ratings: store.ratings(), scores: store.scores(taste.profileVersion()), rules: store.rules() });
 
   const list = (q: Partial<ListQuery> & Pick<ListQuery, 'from' | 'to'>) =>
-    listEvents(store.upcoming(q.from), labels, opinions(), { categories: [], freeOnly: false, place, ...q });
+    listEvents(store.upcoming(q.from), labels(), opinions(), { categories: [], freeOnly: false, place, ...q });
 
   const status = (): Status => ({
     polling: poller.polling,
     place: { name: place.name, radiusKm: place.radiusKm },
-    sources: sources.map((s) => ({ id: s.id, label: s.label, home: s.home, ...store.sourceState(s.id) })),
+    sources: sources().map((s) => ({ id: s.id, label: s.label, home: s.home, pageId: pages.pageIdOf(s.id), ...store.sourceState(s.id) })),
     taste: taste.status(),
   });
 
@@ -120,6 +134,48 @@ export function createApp({ store, poller, taste, sources, place, timeZone, now 
   app.post('/api/taste/refresh', (c) => {
     void taste.run();
     return c.json(status(), 202);
+  });
+
+  app.post('/api/sources/preview', async (c) => {
+    const body = PageBody.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ error: 'give the address of a page' }, 400);
+    try {
+      return c.json(await pages.preview(body.data.url));
+    } catch (err) {
+      return c.json({ error: message(err) }, 422);
+    }
+  });
+
+  app.post('/api/sources', async (c) => {
+    const body = PageBody.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ error: 'give the address of a page' }, 400);
+    try {
+      await pages.add(body.data.url, body.data.label ?? '');
+      return c.json(status());
+    } catch (err) {
+      return c.json({ error: message(err) }, 422);
+    }
+  });
+
+  app.delete('/api/sources/:id', (c) => {
+    pages.remove(Number(c.req.param('id')));
+    return c.json(status());
+  });
+
+  app.post('/api/capture', async (c) => {
+    const body = CaptureBody.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ error: 'give a link, some text or a picture' }, 400);
+    try {
+      return c.json(await pages.capture({ url: body.data.url, text: body.data.text, picture: pictureOf(body.data.picture) }));
+    } catch (err) {
+      return c.json({ error: message(err) }, 422);
+    }
+  });
+
+  app.post('/api/capture/add', async (c) => {
+    const body = TokenBody.safeParse(await c.req.json().catch(() => null));
+    if (!body.success || !pages.addCapture(body.data.token)) return c.json({ error: 'that capture has expired; read it again' }, 410);
+    return c.json({ ok: true });
   });
 
   app.get('/api/status', (c) => c.json(status()));

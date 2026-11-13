@@ -496,14 +496,15 @@ ul.starter {
   min-width: 0;
 }
 
-.starter .what a {
+.starter .what > a,
+.starter .what > span:first-child {
   display: block;
   font-weight: 600;
   text-decoration: none;
   overflow-wrap: anywhere;
 }
 
-.starter .what a:hover {
+.starter .what > a:hover {
   text-decoration: underline;
 }
 
@@ -570,4 +571,34 @@ ul.starter {
 .problem {
   display: block;
   font-size: 0.85rem;
+}
+
+.preview {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+button.small {
+  font-size: 0.8rem;
+  padding: 3px 11px;
+}
+
+.file {
+  color: var(--accent);
+  font-size: 0.9rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.file input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.file:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }

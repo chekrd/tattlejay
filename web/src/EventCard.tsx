@@ -9,6 +9,17 @@ const ACTIONS: { value: RatingValue; label: string; hint: string }[] = [
   { value: 'save', label: 'Save', hint: 'Add to my plans' },
 ];
 
+// An event added from pasted text or a picture has no page to link to.
+export function Linked({ url, children }: { url: string | undefined; children: ReactNode }) {
+  return url ? (
+    <a href={url} target="_blank" rel="noreferrer">
+      {children}
+    </a>
+  ) : (
+    <span>{children}</span>
+  );
+}
+
 export function RatingButtons({ event, onChanged }: { event: EventView; onChanged: () => void }) {
   const choose = (value: RatingValue) => void rate(event.id, event.rating === value ? null : value).then(onChanged, onChanged);
   return (
@@ -44,9 +55,7 @@ export function EventCard({ event, onChanged, showDay, marksUnscored, showReason
       </div>
       <div className="body">
         <h3>
-          <a href={event.sources[0]?.url} target="_blank" rel="noreferrer">
-            {event.title}
-          </a>
+          <Linked url={event.sources[0]?.url}>{event.title}</Linked>
         </h3>
         {place && <p className="place">{place}</p>}
         {showReason && event.reason ? <p className="reason">{event.reason}</p> : event.description && <p className="description">{event.description}</p>}
@@ -62,9 +71,9 @@ export function EventCard({ event, onChanged, showDay, marksUnscored, showReason
           {marksUnscored && event.score === null && event.rating === null && !event.hidden && <span className="more">Not scored yet</span>}
           <span className="sources">
             {event.sources.map((s) => (
-              <a key={s.source} href={s.url} target="_blank" rel="noreferrer">
+              <Linked key={s.source} url={s.url}>
                 {s.label}
-              </a>
+              </Linked>
             ))}
           </span>
         </p>

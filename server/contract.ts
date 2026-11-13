@@ -72,6 +72,8 @@ export interface SourceStatus {
   id: string;
   label: string;
   home: string;
+  // Set for a page the person added (or one of the pages added for them), which can be removed.
+  pageId: number | null;
   lastOkAt: number | null;
   lastError: string | null;
   lastCount: number | null;
@@ -100,4 +102,29 @@ export interface Taste {
   profile: string;
   rules: Rule[];
   rated: number;
+}
+
+// An event as read off a page or a capture, before it is accepted.
+export interface FoundEvent {
+  title: string;
+  when: When;
+  moreDates: number;
+  venue: string | null;
+  address: string | null;
+  category: Category;
+  priceText: string | null;
+  url: string;
+}
+
+export interface PagePreview {
+  url: string;
+  label: string;
+  method: 'embedded' | 'model';
+  events: FoundEvent[];
+}
+
+export interface Capture {
+  // Hand this back to add the event.
+  token: string;
+  event: FoundEvent;
 }

@@ -102,6 +102,30 @@ test('without coordinates, the same title at the same minute is one event', () =
   );
 });
 
+test('a venue named without coordinates takes them from a source that knows the venue', () => {
+  const store = openStore(':memory:');
+  ingest(
+    store,
+    'goout',
+    { items: [item({ key: 'g', title: 'Jiný večer', venue: 'Reduta', lat: 49.1925, lon: 16.6085 }, '2026-12-01', '19:00'), item({ key: 'h', title: 'Film', venue: 'Kino Art', lat: 49.2043, lon: 16.6036 })], coveredUntil: null },
+    at,
+  );
+  ingest(store, 'city', { items: [item({ key: '1', title: 'Zářivá verbež', lat: 49.1927, lon: 16.6088 })], coveredUntil: null }, at);
+  ingest(
+    store,
+    'page',
+    {
+      items: [item({ key: 'p', title: 'Zářivá verbež', venue: 'divadlo Reduta', lat: null, lon: null }, '2026-11-20', '19:00'), item({ key: 'q', title: 'Vernisáž', venue: 'Art', lat: null, lon: null })],
+      coveredUntil: null,
+    },
+    at,
+  );
+  const events = listing(store);
+  const merged = events.find((e) => e.title === 'Zářivá verbež');
+  assert.deepEqual([merged?.sources.length, merged?.when.startTime, merged?.venue], [2, '19:00', 'divadlo Reduta']);
+  assert.equal(events.length, 4);
+});
+
 test('uncertain matches stay separate', () => {
   const store = openStore(':memory:');
   ingest(store, 'city', { items: [item({ key: '1', title: 'Vypsaná fixa' })], coveredUntil: null }, at);

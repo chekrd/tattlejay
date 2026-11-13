@@ -16,12 +16,13 @@ export interface PollerDeps {
   afterPoll?: () => void;
 }
 
-export function createPoller(store: Store, sources: Source[], deps: PollerDeps) {
+// `sources` is asked afresh on every run, since the person adds and removes sources while the app runs.
+export function createPoller(store: Store, sources: () => Source[], deps: PollerDeps) {
   const attemptedAt = new Map<string, number>();
   let running: Promise<void> | null = null;
 
   async function pollAll(force: boolean) {
-    for (const source of sources) {
+    for (const source of sources()) {
       const state = store.sourceState(source.id);
       const started = deps.now();
       if (!force) {

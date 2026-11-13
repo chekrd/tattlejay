@@ -1,4 +1,4 @@
-import type { Category, EventView, Picks, RatingValue, Rule, Status, Taste } from '../../server/contract.ts';
+import type { Capture, Category, EventView, PagePreview, Picks, RatingValue, Rule, Status, Taste } from '../../server/contract.ts';
 import type { Range } from './dates.ts';
 
 export interface EventQuery extends Range {
@@ -40,3 +40,9 @@ export const rate = (eventId: number, value: RatingValue | null) => send<unknown
 export const saveTaste = (change: { seed?: string; profile?: string }) => send<Taste>('PUT', '/api/taste', change);
 export const addRule = (text: string, verdict: Rule['verdict']) => send<Taste>('POST', '/api/taste/rules', { text, verdict });
 export const removeRule = (id: number) => send<Taste>('DELETE', `/api/taste/rules/${id}`);
+
+export const previewPage = (url: string) => send<PagePreview>('POST', '/api/sources/preview', { url });
+export const addPage = (url: string, label: string) => send<Status>('POST', '/api/sources', { url, label });
+export const removePage = (id: number) => send<Status>('DELETE', `/api/sources/${id}`);
+export const capture = (from: { url?: string; text?: string; picture?: string }) => send<Capture>('POST', '/api/capture', from);
+export const addCapture = (token: string) => send<unknown>('POST', '/api/capture/add', { token });

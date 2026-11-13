@@ -80,6 +80,24 @@ const MIGRATIONS = [
     value TEXT NOT NULL
   );
   `,
+  // Pages added by address. `items` keeps what was last read off the page, to be reused while its text (`page_hash`)
+  // stays the same. The first six are the listed sources that publish no structured data.
+  `
+  CREATE TABLE page_source (
+    id INTEGER PRIMARY KEY,
+    url TEXT NOT NULL UNIQUE,
+    label TEXT NOT NULL,
+    page_hash TEXT,
+    items TEXT
+  );
+  INSERT INTO page_source (url, label) VALUES
+    ('https://www.ndbrno.cz/program/', 'Národní divadlo Brno'),
+    ('https://filharmonie-brno.cz/program/', 'Filharmonie Brno'),
+    ('https://www.jic.cz/cz/akce', 'JIC'),
+    ('https://www.muni.cz/kalendar', 'Masarykova univerzita'),
+    ('https://rhkb.cz/sluzby/kalendar-akci', 'RHK Brno'),
+    ('https://www.kudyznudy.cz/kalendar-akci?mesto=582786', 'Kudy z nudy');
+  `,
 ];
 
 function migrate(db: DatabaseSync) {
@@ -117,6 +135,15 @@ export interface StoredRecord {
   url: string;
   description: string | null;
   occurrences: When[];
+}
+
+export interface PageSource {
+  id: number;
+  url: string;
+  label: string;
+  pageHash: string | null;
+  // JSON of the SourceItem list last read off the page.
+  items: string | null;
 }
 
 export interface RatedEvent {
@@ -173,6 +200,7 @@ export function openStore(path: string) {
     'SELECT o.start_date, o.start_time, o.end_date FROM occurrence o JOIN record r ON r.id = o.record_id WHERE r.event_id = ?',
   );
   const titled = db.prepare('SELECT event_id, source, lat FROM record WHERE title_key = ?');
+  const placedVenues = db.prepare('SELECT venue, lat, lon FROM record WHERE venue IS NOT NULL AND lat IS NOT NULL AND lon IS NOT NULL GROUP BY venue');
   const createEvent = db.prepare('INSERT INTO event (first_seen_at) VALUES (?)');
   const saveRecord = db.prepare(`
     INSERT INTO record (event_id, source, key, title, title_key, venue, address, lat, lon, category, tags, price_text,
@@ -213,6 +241,12 @@ export function openStore(path: string) {
     'SELECT DISTINCT r.event_id FROM record r JOIN occurrence o ON o.record_id = r.id WHERE o.end_date >= ?',
   );
   const ratings = db.prepare('SELECT event_id, value, title, venue, category, tags FROM rating ORDER BY at');
+  const pageSources = db.prepare('SELECT id, url, label, page_hash, items FROM page_source ORDER BY id');
+  const addPageSource = db.prepare('INSERT INTO page_source (url, label) VALUES (?, ?)');
+  const keepPage = db.prepare('UPDATE page_source SET page_hash = ?, items = ? WHERE id = ?');
+  const removePageSource = db.prepare('DELETE FROM page_source WHERE id = ?');
+  const removeRecordsOf = db.prepare('DELETE FROM record WHERE source = ?');
+  const removeStateOf = db.prepare('DELETE FROM source_state WHERE source = ?');
   const rate = db.prepare(`
     INSERT INTO rating (event_id, value, at, title, venue, category, tags) VALUES (?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT (event_id) DO UPDATE SET value = excluded.value, at = excluded.at, title = excluded.title,
@@ -233,6 +267,23 @@ export function openStore(path: string) {
   const setSetting = db.prepare('INSERT INTO setting (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value');
 
   return {
+    pageSources(): PageSource[] {
+      return pageSources.all().map((r) => ({ id: Number(r.id), url: String(r.url), label: String(r.label), pageHash: text(r.page_hash), items: text(r.items) }));
+    },
+
+    addPageSource: (url: string, label: string) => Number(addPageSource.run(url, label).lastInsertRowid),
+
+    keepPage(id: number, pageHash: string, items: string) {
+      keepPage.run(pageHash, items, id);
+    },
+
+    removePageSource(id: number, source: string) {
+      removePageSource.run(id);
+      removeStateOf.run(source);
+      removeRecordsOf.run(source);
+      db.exec('DELETE FROM event WHERE id NOT IN (SELECT event_id FROM record)');
+    },
+
     factsOf(eventId: number) {
       return factsOf.all(eventId).map((r) => ({ title: String(r.title), venue: text(r.venue), category: category(r.category), tags: tagList(r.tags) }));
     },
@@ -306,6 +357,8 @@ export function openStore(path: string) {
 
     spansOf: (eventId: number) =>
       spansOf.all(eventId).map((r) => ({ startDate: String(r.start_date), startTime: text(r.start_time), endDate: String(r.end_date) })),
+
+    placedVenues: () => placedVenues.all().map((r) => ({ venue: String(r.venue), lat: Number(r.lat), lon: Number(r.lon) })),
 
     titled: (titleKey: string) => titled.all(titleKey).map((r) => ({ eventId: Number(r.event_id), source: String(r.source), placed: r.lat !== null })),
 

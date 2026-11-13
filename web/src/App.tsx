@@ -77,7 +77,7 @@ export function App() {
       {tab === 'on' && <WhatsOn {...shared} onOpenTaste={() => setTab('taste')} onRefreshPicks={refreshPicks} />}
       {tab === 'plans' && <Plans today={today} revision={revision} onChanged={changed} />}
       {tab === 'taste' && <TastePanel {...shared} onRefreshPicks={refreshPicks} />}
-      {tab === 'sources' && status && <Sources status={status} onRefresh={refreshSources} />}
+      {tab === 'sources' && status && <Sources status={status} today={today} onRefresh={refreshSources} onStatus={setStatus} onChanged={changed} />}
 
       <footer>
         City listings from <a href="https://www.gotobrno.cz" target="_blank" rel="noreferrer">gotobrno.cz</a> (CC BY, via data.brno.cz); the rest from the sites under{' '}

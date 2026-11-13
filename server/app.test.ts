@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { createApp } from './app.ts';
 import { PLACE, TIME_ZONE } from './config.ts';
 import { openStore } from './db.ts';
+import { createPages } from './pages.ts';
 import { createPoller } from './poll.ts';
 import type { Source, SourceItem } from './sources/types.ts';
 import { createTaste } from './taste.ts';
@@ -28,7 +29,8 @@ const item = (key: string, date: string): SourceItem => ({
 
 function setup(fetchItems: Source['fetchItems']) {
   const store = openStore(':memory:');
-  const sources: Source[] = [{ id: 'fake', label: 'Fake', home: 'https://example.test/', neverEmpty: true, fetchItems }];
+  const fake: Source = { id: 'fake', label: 'Fake', home: 'https://example.test/', neverEmpty: true, fetchItems };
+  const sources = () => [fake];
   const poller = createPoller(store, sources, { fetch, pause: async () => {}, now: () => NOW, place: PLACE, timeZone: TIME_ZONE, everyMs: 3_600_000 });
   const taste = createTaste(store, {
     ask: async (prompt, system) =>
@@ -38,7 +40,8 @@ function setup(fetchItems: Source['fetchItems']) {
     now: () => NOW,
     timeZone: TIME_ZONE,
   });
-  const app = createApp({ store, poller, taste, sources, place: PLACE, timeZone: TIME_ZONE, now: () => NOW });
+  const pages = createPages(store, { ask: async () => '[]', fetch, now: () => NOW, timeZone: TIME_ZONE });
+  const app = createApp({ store, poller, taste, pages, sources, place: PLACE, timeZone: TIME_ZONE, now: () => NOW });
   return { app, poller, store, taste };
 }
 
@@ -53,7 +56,7 @@ test('a poll lands in the listing, which defaults to the week from today', async
   assert.deepEqual(body.events.map((e) => e.title), ['Event a', 'Event b']);
 
   const status = (await (await app.request('http://127.0.0.1/api/status')).json()) as { sources: unknown[] };
-  assert.deepEqual(status.sources, [{ id: 'fake', label: 'Fake', home: 'https://example.test/', lastOkAt: NOW, lastError: null, lastCount: 3 }]);
+  assert.deepEqual(status.sources, [{ id: 'fake', label: 'Fake', home: 'https://example.test/', pageId: null, lastOkAt: NOW, lastError: null, lastCount: 3 }]);
 });
 
 test('a source that is not due is left alone, and a failing one keeps its events', async () => {
