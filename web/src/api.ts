@@ -6,6 +6,7 @@ export interface EventQuery extends Range {
   freeOnly: boolean;
   withHidden: boolean;
   placeId: number;
+  online: boolean;
 }
 
 async function json<T>(res: Response): Promise<T> {
@@ -26,13 +27,14 @@ export async function fetchEvents(q: EventQuery, signal: AbortSignal): Promise<E
   for (const c of q.categories) params.append('category', c);
   if (q.freeOnly) params.set('free', '1');
   if (q.withHidden) params.set('hidden', '1');
+  if (q.online) params.set('online', '1');
   return (await get<{ events: EventView[] }>(`/api/events?${params}`, signal)).events;
 }
 
 export const fetchPlans = async (signal: AbortSignal) => (await get<{ events: EventView[] }>('/api/plans', signal)).events;
 export const fetchHistory = (signal: AbortSignal) => get<{ entries: HistoryEntry[]; unrated: EventView[] }>('/api/history', signal);
 export const fetchStarter = async (signal: AbortSignal) => (await get<{ events: EventView[] }>('/api/starter', signal)).events;
-export const fetchPicks = (placeId: number, signal: AbortSignal) => get<Picks>(`/api/picks?place=${placeId}`, signal);
+export const fetchPicks = (placeId: number, online: boolean, signal: AbortSignal) => get<Picks>(`/api/picks?place=${placeId}${online ? '&online=1' : ''}`, signal);
 export const fetchTaste = (signal: AbortSignal) => get<Taste>('/api/taste', signal);
 export const fetchStatus = (signal: AbortSignal) => get<Status>('/api/status', signal);
 

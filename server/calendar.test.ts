@@ -16,6 +16,7 @@ const event = (when: When): EventView => ({
   ongoing: false,
   moreDates: 0,
   sources: [{ source: 'goout', label: 'GoOut', url: 'https://goout.net/cs/x/' }],
+  online: false,
   rating: 'save',
   hidden: false,
   score: null,

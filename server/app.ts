@@ -92,14 +92,18 @@ export function createApp({ store, poller, taste, pages, visits, sources, timeZo
     const to = c.req.query('to') ?? (isDate(from) ? addDays(from, 6) : '');
     if (!isDate(from) || !isDate(to) || to < from) return c.json({ error: 'from and to must be dates, from first' }, 400);
     const categories = (c.req.queries('category') ?? []).filter((v): v is Category => CATEGORIES.some((known) => known === v));
-    const events = list({ from, to, categories, freeOnly: c.req.query('free') === '1', withHidden: c.req.query('hidden') === '1', place: placeOf(c.req.query('place')) });
+    const online = c.req.query('online') === '1';
+    const events = list({ from, to, categories, freeOnly: c.req.query('free') === '1', withHidden: c.req.query('hidden') === '1', online, place: online ? null : placeOf(c.req.query('place')) });
     return c.json({ from, to, events });
   });
 
   // Plans are kept wherever they are.
-  app.get('/api/plans', (c) => c.json({ events: list({ from: day(), to: FAR, savedOnly: true, place: null }) }));
+  app.get('/api/plans', (c) => c.json({ events: list({ from: day(), to: FAR, savedOnly: true, online: null, place: null }) }));
 
-  app.get('/api/picks', (c) => c.json(pickEvents(list({ from: day(), to: FAR, place: placeOf(c.req.query('place')) }), day())));
+  app.get('/api/picks', (c) => {
+    const online = c.req.query('online') === '1';
+    return c.json(pickEvents(list({ from: day(), to: FAR, online, place: online ? null : placeOf(c.req.query('place')) }), day()));
+  });
 
   app.get('/api/starter', (c) =>
     c.json({ events: starterEvents(list({ from: day(), to: addDays(day(), STARTER_DAYS), place: placeOf(c.req.query('place')) }), STARTER_COUNT) }),
@@ -127,7 +131,7 @@ export function createApp({ store, poller, taste, pages, visits, sources, timeZo
 
   app.get('/api/events/:id/calendar.ics', (c) => {
     const id = Number(c.req.param('id'));
-    const event = list({ from: day(), to: FAR, withHidden: true, place: null }).find((e) => e.id === id);
+    const event = list({ from: day(), to: FAR, withHidden: true, online: null, place: null }).find((e) => e.id === id);
     if (!event) return c.json({ error: 'no such event' }, 404);
     return c.body(toIcs(event, timeZone, now()), 200, {
       'content-type': 'text/calendar; charset=utf-8',
@@ -138,7 +142,7 @@ export function createApp({ store, poller, taste, pages, visits, sources, timeZo
   // Besides what was rated: events the person added themselves and has not rated, however long ago they were, since
   // an old one shows nowhere else.
   app.get('/api/history', (c) => {
-    const added = list({ from: ANY_DAY, to: FAR, place: null }).filter((e) => e.rating === null && e.sources.some((s) => s.source === CAPTURED.id));
+    const added = list({ from: ANY_DAY, to: FAR, online: null, place: null }).filter((e) => e.rating === null && e.sources.some((s) => s.source === CAPTURED.id));
     return c.json({ entries: taste.history(), unrated: added });
   });
 

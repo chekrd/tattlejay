@@ -6,7 +6,7 @@ import { kinoArtItems, scalaItems } from './cinemas.ts';
 import { expatItems } from './expat.ts';
 import { impactHubItems } from './impactHub.ts';
 import { mdbItems } from './mdb.ts';
-import { meetupItems } from './meetup.ts';
+import { meetupItems, meetupOnlineItems } from './meetup.ts';
 
 const TODAY = '2026-11-13';
 const ld = (...events: unknown[]) => events.map((e) => `<script type="application/ld+json">${JSON.stringify(e)}</script>`).join('\n');
@@ -42,7 +42,7 @@ test('Kino Art: film, day and time come from the screening address, the title fr
   assert.equal(items[0]?.url, 'https://www.kinoart.cz/cs/program/arco-titulky/2026/11/22/1545');
 });
 
-test('Brno.AI: in-person events in or by Brno, with midnight read as a day', () => {
+test('Brno.AI: in-person events in or by Brno and online ones, with midnight read as a day', () => {
   const event = (name: string, startDate: string, endDate: string, place: string, mode = 'Offline') => ({
     '@type': 'Event',
     name,
@@ -66,10 +66,20 @@ test('Brno.AI: in-person events in or by Brno, with midnight read as a day', () 
     ['Conference', null, [at('2027-05-13', null, null, '2027-05-14')]],
     ['Talk', 'Hotel Continental Brno', [at('2026-11-20', '17:00', '19:00')]],
     ['Factory visit', 'Blanenská 1288/27', [at('2026-11-21', '09:30', '13:00')]],
+    ['Webinar', null, [at('2026-11-20', '17:00', '19:00')]],
   ]);
+  assert.deepEqual(
+    brnoAiItems(html, TODAY).map((i) => [i.title, i.online, i.address]),
+    [
+      ['Conference', false, 'Brno'],
+      ['Talk', false, 'Kounicova 680/6, Brno'],
+      ['Factory visit', false, 'Kuřim'],
+      ['Webinar', true, null],
+    ],
+  );
 });
 
-test('Meetup: upcoming and just-past events with a venue in the city', () => {
+test('Meetup: upcoming and just-past events with a venue in the city, and online ones', () => {
   const event = (id: string, title: string, dateTime: string, venue: string | null, eventType = 'PHYSICAL') => ({
     __typename: 'Event',
     id,
@@ -95,10 +105,16 @@ test('Meetup: upcoming and just-past events with a venue in the city', () => {
   const items = meetupItems(html, TODAY, 'Brno');
   assert.deepEqual(brief(items), [
     ['AI 4 DEV @ Brno', 'Restarace U Lucerny', [at('2026-11-18', '18:00', '21:00')]],
+    ['Online', null, [at('2026-11-19', '18:00', '21:00')]],
     ['Frontendisti', 'Music Lab', [at('2026-11-20', '18:00', '21:00')]],
     ['Last week', 'Restarace U Lucerny', [at('2026-11-10', '18:00', '21:00')]],
   ]);
-  assert.deepEqual(items.map((i) => i.address), ['Veveří 20, Brno', 'Opletalova 1, Brno-město', 'Veveří 20, Brno']);
+  assert.deepEqual(items.map((i) => [i.address, i.online ?? false]), [
+    ['Veveří 20, Brno', false],
+    [null, true],
+    ['Opletalova 1, Brno-město', false],
+    ['Veveří 20, Brno', false],
+  ]);
   assert.throws(() => meetupItems('<html>blocked</html>', TODAY, 'Brno'), /no event data/);
 });
 
@@ -115,7 +131,7 @@ test('Expat Centre: the day and times come from the description', () => {
   ]);
 });
 
-test('Impact Hub: local times, prices, and no virtual events', () => {
+test('Impact Hub: local times, prices, and virtual events as online', () => {
   const event = (over: Record<string, unknown>) => ({ id: 1, title: 'Talk &#8211; live', url: 'https://impacthub.cz/kalendar/talk/', start_date: '2026-11-18 17:30:00', end_date: '2026-11-18 19:00:00', all_day: false, cost: 'Zdarma', is_virtual: false, ...over });
   const items = impactHubItems([event({}), event({ id: 2, cost: '590 Kč -  Kč' }), event({ id: 3, is_virtual: true }), event({ id: 4, all_day: true, cost: '' }), { broken: true }]);
   assert.deepEqual(
@@ -123,9 +139,16 @@ test('Impact Hub: local times, prices, and no virtual events', () => {
     [
       ['1', 'Talk – live', 'Zdarma', true, at('2026-11-18', '17:30', '19:00')],
       ['2', 'Talk – live', '590 Kč', false, at('2026-11-18', '17:30', '19:00')],
+      ['3', 'Talk – live', 'Zdarma', true, at('2026-11-18', '17:30', '19:00')],
       ['4', 'Talk – live', null, null, at('2026-11-18', null)],
     ],
   );
+  assert.deepEqual(items.map((i) => [i.venue, i.online]), [
+    ['Impact Hub Brno', false],
+    ['Impact Hub Brno', false],
+    [null, true],
+    ['Impact Hub Brno', false],
+  ]);
 });
 
 test('Městské divadlo: one production with its performances', () => {
@@ -161,6 +184,40 @@ test('calendar feeds: upcoming events, the place they name or the default, and a
       ['rust meetup', 'base48', null, null, 'https://base48.cz/rust'],
       ['Tech Execs Meetup', 'Base48 hackerspace', 'Brno', 49.19, 'https://luma.com/abc'],
       ['Pyvo', 'ArtBar Druhý Pád', 'Štefánikova 836/1, Brno', null, 'https://pyvo.cz/brno-pyvo/2026-11/'],
+    ],
+  );
+});
+
+test('Meetup search: online events only, with their host and the topic asked for', () => {
+  const event = (id: string, title: string, dateTime: string, eventType: string, over: Record<string, unknown> = {}) => ({
+    __typename: 'Event',
+    id,
+    title,
+    eventUrl: `https://www.meetup.com/g/events/${id}/`,
+    dateTime,
+    eventType,
+    description: 'Talk about agents.',
+    feeSettings: null,
+    group: { __ref: 'Group:1' },
+    ...over,
+  });
+  const state = {
+    'Group:1': { __typename: 'Group', name: 'Baig Academy of AI' },
+    'Event:1': event('1', 'Build AI Agents', '2026-11-19T12:00:00-05:00', 'ONLINE'),
+    'Event:2': event('2', 'In person in Kraków', '2026-11-26T18:00:00+01:00', 'PHYSICAL'),
+    'Event:3': event('3', 'Paid workshop', '2026-11-20T18:00:00+01:00', 'ONLINE', { feeSettings: { amount: 10 }, group: null, description: null, venue: { __typename: 'Venue', name: 'Online event', address: '', city: '' } }),
+    'Event:5': event('5', 'Inline host', '2026-11-21T18:00:00+01:00', 'ONLINE', { group: { __typename: 'Group', name: 'Founders Amsterdam' }, description: null }),
+    'Event:6': { __typename: 'Event', id: '6', dateTime: '2026-11-25T18:00:00+01:00', group: { __typename: 'Group', urlname: 'x' } },
+    'Event:4': event('4', 'Long gone', '2026-10-01T18:00:00+02:00', 'ONLINE'),
+  };
+  const html = `<script id="__NEXT_DATA__" type="application/json">${JSON.stringify({ props: { pageProps: { __APOLLO_STATE__: state } } })}</script>`;
+  const items = meetupOnlineItems(html, TODAY, 'Technology', 'Tech and meetups');
+  assert.deepEqual(
+    items.map((i) => [i.key, i.title, i.online, i.category, i.tags, i.isFree, i.description, i.occurrences[0]]),
+    [
+      ['1', 'Build AI Agents', true, 'Tech and meetups', ['Technology', 'Baig Academy of AI'], true, 'Hosted by Baig Academy of AI. Talk about agents.', at('2026-11-19', '18:00')],
+      ['3', 'Paid workshop', true, 'Tech and meetups', ['Technology'], false, null, at('2026-11-20', '18:00')],
+      ['5', 'Inline host', true, 'Tech and meetups', ['Technology', 'Founders Amsterdam'], true, 'Hosted by Founders Amsterdam.', at('2026-11-21', '18:00')],
     ],
   );
 });

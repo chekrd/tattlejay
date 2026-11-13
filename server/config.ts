@@ -7,7 +7,7 @@ export const HOST = '127.0.0.1';
 export const ROOT = join(import.meta.dirname, '..');
 export const DATA_DIR = process.env.TATTLEJAY_DATA_DIR ?? join(homedir(), 'Library', 'Application Support', 'tattlejay');
 export const DB_PATH = join(DATA_DIR, 'tattlejay.db');
-export const WEB_DIST = join(ROOT, 'web', 'dist');
+export const WEB_DIST = process.env.TATTLEJAY_WEB_DIST ?? join(ROOT, 'web', 'dist');
 
 export const TIME_ZONE = 'Europe/Prague';
 
@@ -17,9 +17,11 @@ export interface Place {
   lon: number;
   radiusKm: number;
   gooutCityId: number;
+  // As Meetup's search addresses a city.
+  meetupLocation: string;
 }
 
-export const PLACE: Place = { name: 'Brno', lat: 49.1951, lon: 16.6068, radiusKm: 30, gooutCityId: 101748109 };
+export const PLACE: Place = { name: 'Brno', lat: 49.1951, lon: 16.6068, radiusKm: 30, gooutCityId: 101748109, meetupLocation: 'cz--Brno' };
 
 export const POLL_EVERY_MS = 20 * 3_600_000;
 

@@ -17,6 +17,8 @@ export interface SourceItem {
   description: string | null;
   imageUrl: string | null;
   occurrences: When[];
+  // Happens only online. Such an event has no place, and is listed apart from those that do.
+  online?: boolean;
 }
 
 export interface FetchContext {

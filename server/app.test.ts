@@ -83,6 +83,30 @@ test('a source that is not due is left alone, and a failing one keeps its events
   assert.equal(body.events.length, 1);
 });
 
+test('online events have their own listing and picks, and stay in plans and the calendar', async () => {
+  const webinar = { ...item('w', '2026-11-16'), title: 'Webinar', venue: null, lat: null, lon: null, online: true };
+  const { app, poller, taste } = setup(async () => ({ items: [item('a', '2026-11-14'), webinar], coveredUntil: null }));
+  await poller.run();
+  const get = async <T>(path: string) => (await (await app.request(`http://127.0.0.1${path}`)).json()) as T;
+  const titles = async (path: string) => (await get<{ events: { title: string }[] }>(path)).events.map((e) => e.title);
+
+  assert.deepEqual(await titles('/api/events'), ['Event a']);
+  assert.deepEqual(await titles('/api/events?online=1'), ['Webinar']);
+  assert.deepEqual(await titles('/api/events?online=1&place=7'), ['Webinar']);
+
+  const [w] = (await get<{ events: { id: number }[] }>('/api/events?online=1')).events;
+  await app.request(`http://127.0.0.1/api/events/${w?.id}/rating`, { method: 'PUT', body: JSON.stringify({ value: 'save' }), headers: { 'content-type': 'application/json' } });
+  assert.deepEqual(await titles('/api/plans'), ['Webinar']);
+  assert.match(await (await app.request(`http://127.0.0.1/api/events/${w?.id}/calendar.ics`)).text(), /LOCATION:Online/);
+
+  await app.request('http://127.0.0.1/api/events/' + w?.id + '/rating', { method: 'PUT', body: JSON.stringify({ value: null }), headers: { 'content-type': 'application/json' } });
+  await app.request('http://127.0.0.1/api/taste', { method: 'PUT', body: JSON.stringify({ seed: 'Anything.' }), headers: { 'content-type': 'application/json' } });
+  await taste.run();
+  const picks = await get<{ week: { title: string }[] }>('/api/picks');
+  const onlinePicks = await get<{ week: { title: string }[] }>('/api/picks?online=1');
+  assert.deepEqual([picks.week.map((e) => e.title), onlinePicks.week.map((e) => e.title)], [['Event a'], ['Webinar']]);
+});
+
 test('rejects bad dates and pages from elsewhere', async () => {
   const { app } = setup(async () => ({ items: [], coveredUntil: null }));
   assert.equal((await app.request('http://127.0.0.1/api/events?from=2026-11-20&to=2026-11-13')).status, 400);

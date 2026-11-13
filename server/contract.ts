@@ -54,6 +54,7 @@ export interface EventView {
   ongoing: boolean;
   moreDates: number;
   sources: EventSourceLink[];
+  online: boolean;
   rating: RatingValue | null;
   // Disliked, or matched by a "never" rule.
   hidden: boolean;
@@ -127,6 +128,7 @@ export interface FoundEvent {
   category: Category;
   priceText: string | null;
   url: string;
+  online: boolean;
 }
 
 export interface PagePreview {

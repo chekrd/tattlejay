@@ -50,7 +50,7 @@ interface CardProps {
 }
 
 export function EventCard({ event, onChanged, showDay, marksUnscored, showReason, extra }: CardProps) {
-  const place = [event.venue, event.address].filter(Boolean).join(' · ');
+  const place = event.online ? 'Online' : [event.venue, event.address].filter(Boolean).join(' · ');
   const time = timeLabel(event.when);
   return (
     <li className={event.hidden ? 'event hidden' : 'event'}>

@@ -3,6 +3,7 @@ import { TIME_ZONE } from '../config.ts';
 import { addDays, localOf } from '../dates.ts';
 import { collapse, titleKey, truncate } from '../text.ts';
 import { getText } from './http.ts';
+import type { Category } from '../contract.ts';
 import type { FetchContext, FetchResult, Source, SourceItem } from './types.ts';
 
 // Meetup's API is closed to ordinary accounts and its calendar feeds name no venue, so each group's public events page
@@ -37,10 +38,17 @@ const Event = z.object({
   endTime: z.string().nullish(),
   eventType: z.string().nullish(),
   description: z.string().nullish(),
-  venue: z.object({ __ref: z.string() }).nullish(),
+  feeSettings: z.unknown().nullish(),
+  // A reference into the page's other records, or (on search pages) the record itself.
+  venue: z.record(z.string(), z.unknown()).nullish(),
+  group: z.record(z.string(), z.unknown()).nullish(),
 });
 
+type MeetupEvent = z.infer<typeof Event>;
+
 const Venue = z.object({ name: z.string().nullish(), address: z.string().nullish(), city: z.string().nullish() });
+
+const Group = z.object({ name: z.string().nullish() });
 
 const State = z.object({ props: z.object({ pageProps: z.object({ __APOLLO_STATE__: z.record(z.string(), z.unknown()) }) }) });
 
@@ -53,42 +61,63 @@ function address(street: string | null | undefined, city: string | null | undefi
   return city && !titleKey(street).includes(titleKey(city)) ? `${street}, ${city}` : street;
 }
 
-// Groups also post their events in other cities and online; only those with a venue in the city are kept.
-export function meetupItems(html: string, today: string, city: string): SourceItem[] {
+// The events and what they point to (venues, groups), as a Meetup page embeds them for itself.
+function pageState(html: string): Record<string, unknown> {
   const embedded = EMBEDDED.exec(html)?.[1];
   if (!embedded) throw new Error('the Meetup page carried no event data');
-  const state = State.parse(JSON.parse(embedded)).props.pageProps.__APOLLO_STATE__;
-  const items: SourceItem[] = [];
+  return State.parse(JSON.parse(embedded)).props.pageProps.__APOLLO_STATE__;
+}
+
+function resolve(state: Record<string, unknown>, link: Record<string, unknown> | null | undefined): unknown {
+  return typeof link?.__ref === 'string' ? state[link.__ref] : link;
+}
+
+function* events(state: Record<string, unknown>, today: string) {
   for (const [key, raw] of Object.entries(state)) {
     if (!key.startsWith('Event:')) continue;
     const parsed = Event.safeParse(raw);
     if (!parsed.success) continue;
-    const e = parsed.data;
-    const start = localOf(e.dateTime, TIME_ZONE);
-    const venue = Venue.safeParse(e.venue ? state[e.venue.__ref] : undefined);
-    if (!start || start.date < addDays(today, -KEEP_PAST_DAYS) || !venue.success || e.eventType === 'ONLINE') continue;
-    if (!titleKey(venue.data.city ?? '').startsWith(titleKey(city))) continue;
-    const end = localOf(e.endTime, TIME_ZONE);
-    items.push({
-      key: e.id,
-      title: collapse(e.title),
-      venue: venue.data.name ? collapse(venue.data.name) : null,
-      address: address(venue.data.address, venue.data.city),
-      lat: null,
-      lon: null,
-      category: 'Tech and meetups',
-      tags: [],
-      priceText: null,
-      isFree: null,
-      url: e.eventUrl,
-      description: e.description ? truncate(collapse(e.description), 400) : null,
-      imageUrl: null,
-      occurrences: [{ startDate: start.date, startTime: start.time, endDate: end && end.date >= start.date ? end.date : start.date, endTime: end ? end.time : null }],
-    });
+    const start = localOf(parsed.data.dateTime, TIME_ZONE);
+    if (start && start.date >= addDays(today, -KEEP_PAST_DAYS)) yield { event: parsed.data, start };
+  }
+}
+
+function item(e: MeetupEvent, start: { date: string; time: string }, over: Partial<SourceItem>): SourceItem {
+  const end = localOf(e.endTime, TIME_ZONE);
+  return {
+    key: e.id,
+    title: collapse(e.title),
+    venue: null,
+    address: null,
+    lat: null,
+    lon: null,
+    category: 'Tech and meetups',
+    tags: [],
+    priceText: null,
+    isFree: null,
+    url: e.eventUrl,
+    description: e.description ? truncate(collapse(e.description), 400) : null,
+    imageUrl: null,
+    occurrences: [{ startDate: start.date, startTime: start.time, endDate: end && end.date >= start.date ? end.date : start.date, endTime: end ? end.time : null }],
+    ...over,
+  };
+}
+
+// Groups also post their events in other cities; those with a venue in the city are kept, and those online.
+export function meetupItems(html: string, today: string, city: string): SourceItem[] {
+  const state = pageState(html);
+  const items: SourceItem[] = [];
+  for (const { event: e, start } of events(state, today)) {
+    if (e.eventType === 'ONLINE') {
+      items.push(item(e, start, { online: true }));
+      continue;
+    }
+    const venue = Venue.safeParse(resolve(state, e.venue));
+    if (!venue.success || !titleKey(venue.data.city ?? '').startsWith(titleKey(city))) continue;
+    items.push(item(e, start, { venue: venue.data.name ? collapse(venue.data.name) : null, address: address(venue.data.address, venue.data.city) }));
   }
   return items;
 }
-
 async function fetchItems({ fetch, pause, today, place }: FetchContext): Promise<FetchResult> {
   const items: SourceItem[] = [];
   let failures = 0;
@@ -108,3 +137,74 @@ async function fetchItems({ fetch, pause, today, place }: FetchContext): Promise
 }
 
 export const meetup: Source = { id: 'meetup', label: 'Meetup', home: 'https://www.meetup.com/find/?location=cz--Brno&source=EVENTS', fetchItems };
+
+// Meetup's search, asked for online events near the city, one topic at a time: each answer holds only the first dozen,
+// and asking per topic reaches more. The topic numbers are those of Meetup's own topic links; 546 and 405 were checked.
+const SEARCH_TOPICS: [id: number, label: string, category: Category][] = [
+  [546, 'Technology', 'Tech and meetups'],
+  [405, 'Career & Business', 'Business and networking'],
+  [436, 'Science & Education', 'Talks and lectures'],
+  [521, 'Art & Culture', 'Talks and lectures'],
+  [395, 'Music', 'Music'],
+  [612, 'Dancing', 'Theatre and dance'],
+  [467, 'Writing', 'Talks and lectures'],
+  [622, 'Identity & Language', 'Talks and lectures'],
+  [604, 'Community & Environment', 'Talks and lectures'],
+  [642, 'Movements & Politics', 'Talks and lectures'],
+  [449, 'Support & Coaching', 'Talks and lectures'],
+  [511, 'Health & Wellbeing', 'Talks and lectures'],
+  [482, 'Sports & Fitness', 'Sport'],
+  [673, 'Parents & Family', 'Family and kids'],
+  [571, 'Hobbies & Passions', 'Other'],
+  [652, 'Social Activities', 'Other'],
+  [535, 'Games', 'Other'],
+];
+
+const searchUrl = (location: string, topic: number) => `https://www.meetup.com/find/?location=${location}&source=EVENTS&eventType=online&categoryId=${topic}`;
+
+export function meetupOnlineItems(html: string, today: string, topic: string, category: Category): SourceItem[] {
+  const state = pageState(html);
+  const items: SourceItem[] = [];
+  for (const { event: e, start } of events(state, today)) {
+    if (e.eventType !== 'ONLINE') continue;
+    const group = Group.safeParse(resolve(state, e.group));
+    const host = group.success && group.data.name ? collapse(group.data.name) : null;
+    const about = e.description ? truncate(collapse(e.description), 400) : null;
+    items.push(
+      item(e, start, {
+        online: true,
+        category,
+        tags: host ? [topic, host] : [topic],
+        // Meetup gives a fee only for paid events.
+        isFree: !e.feeSettings,
+        description: [host && `Hosted by ${host}.`, about].filter(Boolean).join(' ') || null,
+      }),
+    );
+  }
+  return items;
+}
+
+async function fetchOnline({ fetch, pause, today, place }: FetchContext): Promise<FetchResult> {
+  const items: SourceItem[] = [];
+  let failures = 0;
+  let lastError: unknown;
+  for (const [i, [id, label, category]] of SEARCH_TOPICS.entries()) {
+    if (i > 0) await pause(500);
+    try {
+      items.push(...meetupOnlineItems(await getText(fetch, searchUrl(place.meetupLocation, id)), today, label, category));
+    } catch (err) {
+      failures++;
+      lastError = err;
+    }
+  }
+  if (failures === SEARCH_TOPICS.length) throw lastError;
+  // A search shows a few of many events, so one missing from it is not known to be cancelled.
+  return { items, coveredUntil: today };
+}
+
+export const meetupOnline: Source = {
+  id: 'meetup-online',
+  label: 'Meetup online',
+  home: 'https://www.meetup.com/find/?location=cz--Brno&source=EVENTS&eventType=online',
+  fetchItems: fetchOnline,
+};

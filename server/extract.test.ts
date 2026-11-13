@@ -16,7 +16,7 @@ test('a page becomes readable text with link addresses kept', () => {
   });
 });
 
-test('embedded events become items, grouped by title', () => {
+test('embedded events become items, grouped by title, online ones marked and placeless', () => {
   const event = (over: Record<string, unknown>) => ({
     '@type': 'MusicEvent',
     name: 'Koncert',
@@ -37,6 +37,7 @@ test('embedded events become items, grouped by title', () => {
       address: 'Ulice 1, Brno',
       lat: 49.2,
       lon: 16.6,
+      online: false,
       category: 'Music',
       tags: [],
       priceText: '250 Kč',
@@ -56,6 +57,7 @@ test('embedded events become items, grouped by title', () => {
       address: null,
       lat: null,
       lon: null,
+      online: false,
       category: 'Other',
       tags: [],
       priceText: 'Free',
@@ -65,6 +67,23 @@ test('embedded events become items, grouped by title', () => {
       imageUrl: null,
       occurrences: [{ startDate: '2026-12-01', startTime: null, endDate: '2026-12-03', endTime: null }],
     },
+    {
+      key: 'stream',
+      title: 'Stream',
+      venue: null,
+      address: null,
+      lat: null,
+      lon: null,
+      online: true,
+      category: 'Music',
+      tags: [],
+      priceText: '250 Kč',
+      isFree: false,
+      url: 'https://klub.test/koncert',
+      description: null,
+      imageUrl: null,
+      occurrences: [{ startDate: '2026-11-20', startTime: '19:00', endDate: '2026-11-20', endTime: null }],
+    },
   ]);
 });
 
@@ -73,6 +92,7 @@ test("the model's events are checked, resolved against the page and grouped", ()
   [{"title":"Rusalka","startDate":"2026-11-14","startTime":"19:00","endDate":null,"endTime":null,"venue":"Janáčkovo divadlo","address":null,"category":"Theatre and dance","price":"od 340 Kč","free":false,"url":"/akce/rusalka"},
    {"title":"Rusalka","startDate":"2026-11-20","startTime":"7 pm","category":"Opera","url":null},
    {"title":"Den otevřených dveří","startDate":"2026-12-01","endDate":"2026-12-03","free":true},
+   {"title":"Webinář","startDate":"2026-12-02","startTime":"18:00","venue":"Zoom","online":true},
    {"title":"Loni","startDate":"2025-12-01"},
    {"title":"Bez data","startDate":"brzy"}]`;
   const items = parseFound(reply, 'https://divadlo.test/program/', TODAY);
@@ -91,8 +111,11 @@ test("the model's events are checked, resolved against the page and grouped", ()
         ],
       ],
       ['Den otevřených dveří', 'Other', 'Free', true, 'https://divadlo.test/program/', [{ startDate: '2026-12-01', startTime: null, endDate: '2026-12-03', endTime: null }]],
+      ['Webinář', 'Other', null, null, 'https://divadlo.test/program/', [{ startDate: '2026-12-02', startTime: '18:00', endDate: '2026-12-02', endTime: null }]],
     ],
   );
+  const webinar = items.find((i) => i.title === 'Webinář');
+  assert.deepEqual([webinar?.online, webinar?.venue, items[0]?.online], [true, null, false]);
   assert.deepEqual(parseFound('[]', null, TODAY), []);
   assert.throws(() => parseFound('Sorry, no.', null, TODAY), /did not reply with a list/);
 });

@@ -46,7 +46,7 @@ test('a page is previewed, added, and read by the model again only when its text
     url: 'https://sal.test/program',
     label: 'Sál – program',
     method: 'model',
-    events: [{ title: 'Koncert', when: { startDate: '2026-11-20', startTime: '19:00', endDate: '2026-11-20', endTime: null }, moreDates: 0, venue: 'Sál', address: null, category: 'Music', priceText: null, url: 'https://sal.test/a' }],
+    events: [{ title: 'Koncert', when: { startDate: '2026-11-20', startTime: '19:00', endDate: '2026-11-20', endTime: null }, moreDates: 0, venue: 'Sál', address: null, category: 'Music', priceText: null, url: 'https://sal.test/a', online: false }],
   });
   assert.equal(listing().length, 0, 'a preview adds nothing');
 

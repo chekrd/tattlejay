@@ -28,6 +28,7 @@ function found(item: SourceItem): FoundEvent {
     category: item.category,
     priceText: item.priceText,
     url: item.url,
+    online: item.online ?? false,
   };
 }
 

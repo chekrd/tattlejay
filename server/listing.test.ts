@@ -26,6 +26,7 @@ const record = (eventId: number, over: Partial<StoredRecord> = {}): StoredRecord
   url: `https://example.test/${eventId}`,
   description: null,
   placeId: 0,
+  online: false,
   occurrences: [on('2026-11-14')],
   ...over,
 });
@@ -86,6 +87,25 @@ test('filters by category, price and place', () => {
   assert.deepEqual(ids({ place: null }), [1, 2, 3, 4]);
   assert.deepEqual(ids({ categories: ['Film', 'Sport'] }), [1]);
   assert.deepEqual(ids({ freeOnly: true }), [1]);
+});
+
+test('online events are listed apart, wherever the place is', () => {
+  const records = [record(1), record(2, { online: true, lat: null, lon: null }), record(3, { online: true, lat: null, lon: null, placeId: 5 })];
+  const ids = (q: Partial<ListQuery>) => listEvents(records, labels, NO_OPINIONS, query(q)).map((e) => [e.id, e.online]);
+  assert.deepEqual(ids({}), [[1, false]]);
+  assert.deepEqual(ids({ online: true }), [
+    [2, true],
+    [3, true],
+  ]);
+  assert.deepEqual(ids({ online: true, place: { id: 9, lat: 50.08, lon: 14.44, radiusKm: 30 } }), [
+    [2, true],
+    [3, true],
+  ]);
+  assert.deepEqual(ids({ online: null }), [
+    [1, false],
+    [2, true],
+    [3, true],
+  ]);
 });
 
 test('an event no source places belongs to the place it was read for', () => {

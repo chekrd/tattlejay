@@ -30,7 +30,7 @@ export function toIcs(event: EventView, timeZone: string, now: number): string {
     const end = when.endTime ? { date: when.endDate, time: when.endTime } : addHours(when.startDate, when.startTime, 2);
     lines.push(`DTSTART;TZID=${timeZone}:${stamp(when.startDate, when.startTime)}`, `DTEND;TZID=${timeZone}:${stamp(end.date, end.time)}`);
   }
-  const place = [event.venue, event.address].filter(Boolean).join(', ');
+  const place = event.online ? 'Online' : [event.venue, event.address].filter(Boolean).join(', ');
   if (place) lines.push(`LOCATION:${escape(place)}`);
   const url = event.sources[0]?.url;
   if (url) lines.push(`URL:${url}`, `DESCRIPTION:${escape(url)}`);

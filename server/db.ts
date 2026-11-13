@@ -118,6 +118,9 @@ const MIGRATIONS = [
   ALTER TABLE rating ADD COLUMN event_date TEXT;
   ALTER TABLE rating ADD COLUMN url TEXT;
   `,
+  `
+  ALTER TABLE record ADD COLUMN online INTEGER NOT NULL DEFAULT 0;
+  `,
 ];
 
 function migrate(db: DatabaseSync) {
@@ -155,6 +158,7 @@ export interface StoredRecord {
   url: string;
   description: string | null;
   placeId: number;
+  online: boolean;
   occurrences: When[];
 }
 
@@ -236,14 +240,14 @@ export function openStore(path: string) {
   const createEvent = db.prepare('INSERT INTO event (first_seen_at) VALUES (?)');
   const saveRecord = db.prepare(`
     INSERT INTO record (event_id, source, key, title, title_key, venue, address, lat, lon, category, tags, price_text,
-      is_free, url, description, image_url, seen_at, place_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      is_free, url, description, image_url, seen_at, place_id, online)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT (source, key) DO UPDATE SET
       title = excluded.title, title_key = excluded.title_key, venue = excluded.venue, address = excluded.address,
       lat = excluded.lat, lon = excluded.lon, category = excluded.category, tags = excluded.tags,
       price_text = excluded.price_text, is_free = excluded.is_free, url = excluded.url,
       description = excluded.description, image_url = excluded.image_url, seen_at = excluded.seen_at,
-      place_id = excluded.place_id
+      place_id = excluded.place_id, online = excluded.online
     RETURNING id
   `);
   const clearOccurrences = db.prepare('DELETE FROM occurrence WHERE record_id = ? AND end_date >= ?');
@@ -261,7 +265,7 @@ export function openStore(path: string) {
   const deleteRecord = db.prepare('DELETE FROM record WHERE id = ?');
   const upcoming = db.prepare(`
     SELECT r.id, r.event_id, r.source, r.title, r.venue, r.address, r.lat, r.lon, r.category, r.tags, r.price_text,
-      r.is_free, r.url, r.description, r.place_id, o.start_date, o.start_time, o.end_date, o.end_time
+      r.is_free, r.url, r.description, r.place_id, r.online, o.start_date, o.start_time, o.end_date, o.end_time
     FROM record r JOIN occurrence o ON o.record_id = r.id
     WHERE o.end_date >= ?
     ORDER BY r.event_id, r.id
@@ -446,6 +450,7 @@ export function openStore(path: string) {
         item.imageUrl,
         at.now,
         placeId,
+        Number(item.online ?? false),
       );
       const id = Number(row?.id);
       clearOccurrences.run(id, at.today);
@@ -488,6 +493,7 @@ export function openStore(path: string) {
             url: String(r.url),
             description: text(r.description),
             placeId: Number(r.place_id),
+            online: Number(r.online) === 1,
             occurrences: [],
           };
           records.push(last);

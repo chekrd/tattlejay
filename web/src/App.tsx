@@ -10,10 +10,11 @@ import { Sources } from './Sources.tsx';
 import { TastePanel } from './TastePanel.tsx';
 import { WhatsOn } from './WhatsOn.tsx';
 
-type Tab = 'on' | 'plans' | 'history' | 'taste' | 'sources';
+type Tab = 'on' | 'online' | 'plans' | 'history' | 'taste' | 'sources';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'on', label: "What's on" },
+  { id: 'online', label: 'Online' },
   { id: 'plans', label: 'My plans' },
   { id: 'history', label: 'History' },
   { id: 'taste', label: 'My taste' },
@@ -75,7 +76,8 @@ export function App() {
         ))}
       </nav>
 
-      {tab === 'on' && <WhatsOn {...shared} onOpenTaste={() => setTab('taste')} onRefreshPicks={refreshPicks} />}
+      {tab === 'on' && <WhatsOn key="on" {...shared} onOpenTaste={() => setTab('taste')} onRefreshPicks={refreshPicks} />}
+      {tab === 'online' && <WhatsOn key="online" {...shared} online onOpenTaste={() => setTab('taste')} onRefreshPicks={refreshPicks} />}
       {tab === 'plans' && <Plans today={today} revision={revision} onChanged={changed} />}
       {tab === 'history' && <History today={today} revision={revision} onChanged={changed} />}
       {tab === 'taste' && <TastePanel {...shared} onRefreshPicks={refreshPicks} />}

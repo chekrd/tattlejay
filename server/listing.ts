@@ -20,6 +20,8 @@ export interface ListQuery {
   // Disliked events and those under a "never" rule are left out unless asked for.
   withHidden?: boolean;
   savedOnly?: boolean;
+  // Online events are listed apart: true lists only them, null both kinds, and left out only events with a place.
+  online?: boolean | null;
 }
 
 // What the person has said about events, laid over the listing.
@@ -93,8 +95,10 @@ function ruleFor(rules: Rule[], title: string, venue: string | null, verdict: Ru
 }
 
 function view(records: StoredRecord[], labels: Labels, opinions: Opinions, q: ListQuery): EventView | undefined {
+  const online = records.every((r) => r.online);
+  if (q.online !== null && online !== (q.online ?? false)) return undefined;
   const { place } = q;
-  if (place) {
+  if (place && !online) {
     // An event is here when a source puts it within reach, or, when no source says where it is, when one of them was
     // read for this place.
     const placed = records.filter((r) => r.lat !== null && r.lon !== null);
@@ -135,6 +139,7 @@ function view(records: StoredRecord[], labels: Labels, opinions: Opinions, q: Li
     ongoing: when.startDate < q.from,
     moreDates: ahead.filter((o) => o !== when && o.startDate >= q.from).length,
     sources: links(records, when, labels),
+    online,
     rating,
     hidden,
     score: score?.score ?? null,

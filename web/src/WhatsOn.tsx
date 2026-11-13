@@ -25,10 +25,12 @@ interface Shared {
   revision: number;
   placeId: number;
   onChanged: () => void;
+  // The online events, which are listed apart from those with a place.
+  online?: boolean;
 }
 
-function PickedForYou({ today, status, revision, placeId, onChanged, onOpenTaste, onRefreshPicks }: Shared & { onOpenTaste: () => void; onRefreshPicks: () => void }) {
-  const picks = useLoad((signal) => fetchPicks(placeId, signal), `picks ${placeId} ${revision}`);
+function PickedForYou({ today, status, revision, placeId, online = false, onChanged, onOpenTaste, onRefreshPicks }: Shared & { onOpenTaste: () => void; onRefreshPicks: () => void }) {
+  const picks = useLoad((signal) => fetchPicks(placeId, online, signal), `picks ${placeId} ${online} ${revision}`);
   const taste = status?.taste;
   if (!taste) return null;
 
@@ -54,7 +56,7 @@ function PickedForYou({ today, status, revision, placeId, onChanged, onOpenTaste
 
   return (
     <section className="picks" aria-label="Picked for you">
-      <h2 className="plain">Picked for you</h2>
+      <h2 className="plain">{online ? 'Picked for you online' : 'Picked for you'}</h2>
       {note}
       {!taste.ready && !taste.running && !taste.stale && !taste.error && (
         <p className="note">
@@ -129,7 +131,7 @@ function Days({ events: all, today, onChanged, marksUnscored, past }: DaysProps)
 }
 
 export function WhatsOn(props: Shared & { onOpenTaste: () => void; onRefreshPicks: () => void }) {
-  const { today, status, revision, placeId, onChanged } = props;
+  const { today, status, revision, placeId, online = false, onChanged } = props;
   const [preset, setPreset] = useState<Preset>('week');
   const [custom, setCustom] = useState<Range>({ from: today, to: addDays(today, 30) });
   const [categories, setCategories] = useState<Category[]>([]);
@@ -137,7 +139,7 @@ export function WhatsOn(props: Shared & { onOpenTaste: () => void; onRefreshPick
   const [withHidden, setWithHidden] = useState(false);
 
   const range = preset === 'range' ? custom : presetRange(preset, today);
-  const query = { ...range, categories, freeOnly, withHidden, placeId };
+  const query = { ...range, categories, freeOnly, withHidden, placeId, online };
   const listing = useLoad((signal) => fetchEvents(query, signal), `events ${JSON.stringify(query)} ${revision}`);
 
   const toggle = (category: Category) =>
@@ -147,7 +149,7 @@ export function WhatsOn(props: Shared & { onOpenTaste: () => void; onRefreshPick
     <>
       <PickedForYou {...props} />
 
-      <h2 className="plain">Everything on</h2>
+      <h2 className="plain">{online ? 'Everything online' : 'Everything on'}</h2>
       <div className="filters">
         <div className="presets" role="group" aria-label="Dates">
           {PRESETS.map((p) => (

@@ -66,6 +66,7 @@ pnpm check        # types, lint, tests
 | Kino Art | its programme page | one entry per film |
 | Impact Hub Brno | its calendar API | |
 | Meetup | each listed group's events page | groups are listed in `server/sources/meetup.ts` |
+| Meetup online | Meetup's search, online events, one page per topic | online events only |
 | Luma | calendar subscriptions | communities are listed in `server/sources/calendars.ts` |
 | Brno.AI | events embedded in its listing | only in-person events in or by Brno |
 | Pyvo, WUG Brno, Base48 | their calendar feeds | Base48's own meetings are left out |
@@ -87,6 +88,14 @@ it gave last time and says what went wrong.
 
 A page added by address gives its nearest events only (whatever one page shows), and an event read by the model has
 no map position unless its venue is already known from another source.
+
+### Online events
+
+Online-only events have a tab of their own, **Online**, with its own picks; they never appear in What's on or its
+picks, and the place menu does not apply to them. They come from Meetup's online search near Brno (one page per
+topic, about 160 events at a time, mostly international and in English), from the online events of the Meetup groups,
+Brno.AI and Impact Hub, and from pasted pages and captures that say an event is online. They are scored against the
+same taste profile, so expect a few more model calls when picks are made.
 
 ### Another city
 

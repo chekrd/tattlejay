@@ -14,7 +14,7 @@ function Found({ event, today }: { event: FoundEvent; today: string }) {
       <span className="what">
         <Linked url={event.url}>{event.title}</Linked>
         <span className="where">
-          {[dayLabel(event.when.startDate, today), timeLabel(event.when), event.venue ?? event.address, event.category, event.priceText, event.moreDates > 0 ? `+${event.moreDates} more dates` : null]
+          {[dayLabel(event.when.startDate, today), timeLabel(event.when), event.online ? 'Online' : (event.venue ?? event.address), event.category, event.priceText, event.moreDates > 0 ? `+${event.moreDates} more dates` : null]
             .filter(Boolean)
             .join(' · ')}
         </span>

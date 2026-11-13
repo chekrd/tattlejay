@@ -7,7 +7,7 @@ import { getText } from './http.ts';
 import type { FetchContext, FetchResult, Source, SourceItem } from './types.ts';
 
 const HOME = 'https://www.brno.ai/akce';
-// The listing is national; keep what is in or next to Brno.
+// The listing is national; keep what is online, or in or next to Brno.
 const NEARBY = /\b(brno|kurim)\b/;
 
 // The page writes a day as local midnight (and the last day as the midnight after it), and a timed event as its time.
@@ -29,17 +29,18 @@ export function brnoAiItems(html: string, today: string): SourceItem[] {
     const title = str(event.name);
     const when = occurrence(str(event.startDate), str(event.endDate));
     if (!title || !when || when.endDate < today) continue;
-    if (str(event.eventAttendanceMode)?.includes('Online')) continue;
+    const online = str(event.eventAttendanceMode)?.includes('Online') ?? false;
     const location = event.location && typeof event.location === 'object' ? (event.location as Record<string, unknown>) : {};
-    const where = str(location.name) ?? str(location.address) ?? (typeof event.location === 'string' ? event.location : '');
-    if (!NEARBY.test(titleKey(where))) continue;
+    const where = online ? '' : (str(location.name) ?? str(location.address) ?? (typeof event.location === 'string' ? event.location : ''));
+    if (!online && !NEARBY.test(titleKey(where))) continue;
     const [venue, ...rest] = where.split(',').map((part) => part.trim());
     const key = `${titleKey(title)} ${when.startDate}`;
     items.set(key, {
       key,
       title: collapse(title),
       venue: rest.length > 0 ? (venue ?? null) : null,
-      address: rest.length > 0 ? rest.join(', ') : where,
+      address: rest.length > 0 ? rest.join(', ') : where || null,
+      online,
       lat: null,
       lon: null,
       category: 'Tech and meetups',

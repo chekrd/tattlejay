@@ -36,8 +36,9 @@ export function impactHubItems(raw: unknown[]): SourceItem[] {
   const items: SourceItem[] = [];
   for (const entry of raw) {
     const parsed = Event.safeParse(entry);
-    if (!parsed.success || parsed.data.is_virtual) continue;
+    if (!parsed.success) continue;
     const e = parsed.data;
+    const online = e.is_virtual === true;
     const start = stamp(e.start_date);
     if (!start) continue;
     const end = stamp(e.end_date);
@@ -46,10 +47,11 @@ export function impactHubItems(raw: unknown[]): SourceItem[] {
     items.push({
       key: String(e.id),
       title: plainText(e.title),
-      venue: 'Impact Hub Brno',
-      address: 'Cyrilská 7, Brno',
-      lat: 49.1899,
-      lon: 16.6206,
+      venue: online ? null : 'Impact Hub Brno',
+      address: online ? null : 'Cyrilská 7, Brno',
+      lat: online ? null : 49.1899,
+      lon: online ? null : 16.6206,
+      online,
       category: 'Business and networking',
       tags: [],
       ...price(e.cost),
