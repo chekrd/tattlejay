@@ -141,3 +141,16 @@ export interface Capture {
   token: string;
   event: FoundEvent;
 }
+
+// One event the person reacted to, as it was when they did.
+export interface HistoryEntry {
+  eventId: number;
+  value: RatingValue;
+  // When the reaction was last set.
+  at: number;
+  title: string;
+  venue: string | null;
+  category: Category;
+  eventDate: string | null;
+  url: string | null;
+}

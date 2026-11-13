@@ -173,6 +173,24 @@ test('a later poll updates in place and keeps the event', () => {
   assert.equal(events[0]?.when.startDate, '2026-11-22');
 });
 
+test('dates that have passed are kept when a source moves on to the next ones', () => {
+  const store = openStore(':memory:');
+  const dates = (...days: string[]) => days.map((d) => ({ startDate: d, startTime: '19:00', endDate: d, endTime: null }));
+  ingest(store, 'goout', { items: [item({ key: 's', title: 'Series', occurrences: dates('2026-11-13', '2026-11-20') }), item({ key: 'o', title: 'One night' }, '2026-11-14')], coveredUntil: null }, at);
+
+  const later = { today: '2026-11-18', now: 2 };
+  ingest(store, 'goout', { items: [item({ key: 's', title: 'Series', occurrences: dates('2026-11-21', '2026-11-27') })], coveredUntil: null }, later);
+  ingest(store, 'goout', { items: [item({ key: 's', title: 'Series', occurrences: dates('2026-11-21', '2026-11-27') })], coveredUntil: null }, later);
+
+  const lastWeek = listEvents(store.upcoming('2026-11-11'), labels, NO_OPINIONS, { from: '2026-11-11', to: '2026-11-17', categories: [], freeOnly: false, place: HOME });
+  assert.deepEqual(lastWeek.map((e) => [e.title, e.when.startDate, e.moreDates]), [
+    ['Series', '2026-11-13', 2],
+    ['One night', '2026-11-14', 0],
+  ]);
+  const ahead = listEvents(store.upcoming('2026-11-18'), labels, NO_OPINIONS, { from: '2026-11-18', to: '2026-12-31', categories: [], freeOnly: false, place: HOME });
+  assert.deepEqual(ahead.map((e) => [e.title, e.when.startDate, e.moreDates]), [['Series', '2026-11-21', 1]]);
+});
+
 test('what a source stops listing is removed, but only inside the window it read', () => {
   const store = openStore(':memory:');
   const soon = item({ key: 'soon', title: 'Soon' }, '2026-11-20');

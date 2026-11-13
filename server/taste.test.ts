@@ -129,3 +129,32 @@ test('unrating changes the inputs too', async () => {
   assert.equal(store.ratings().size, 0);
   assert.equal(taste.status().stale, false, 'no words and no ratings left: nothing to rebuild from');
 });
+
+test('history keeps what was rated, latest first, and outlives the event itself', async () => {
+  let now = NOW;
+  const store = openStore(':memory:');
+  ingest(store, 'goout', { items: [item('1', 'Punk night'), item('2', 'Rusalka', { venue: 'Janáčkovo divadlo', category: 'Theatre and dance' })], coveredUntil: null }, { today: '2026-11-13', now: NOW });
+  const taste = createTaste(store, { ask: async () => 'unused', now: () => now, timeZone: TIME_ZONE });
+  const [punk, rusalka] = store.upcomingIds('2026-11-13');
+
+  taste.rate(punk!, 'like');
+  now += 60_000;
+  taste.rate(rusalka!, 'dislike');
+  assert.deepEqual(taste.history(), [
+    { eventId: rusalka, value: 'dislike', at: NOW + 60_000, title: 'Rusalka', venue: 'Janáčkovo divadlo', category: 'Theatre and dance', eventDate: '2026-11-20', url: 'https://example.test/2' },
+    { eventId: punk, value: 'like', at: NOW, title: 'Punk night', venue: 'Fléda', category: 'Music', eventDate: '2026-11-20', url: 'https://example.test/1' },
+  ]);
+
+  // The source drops the event while it is still ahead, so its rows go.
+  ingest(store, 'goout', { items: [item('2', 'Rusalka')], coveredUntil: null }, { today: '2026-11-13', now });
+  assert.deepEqual(store.factsOf(punk!), []);
+  now += 60_000;
+  assert.equal(taste.rate(punk!, 'save'), true);
+  assert.deepEqual(taste.history().map((e) => [e.title, e.value, e.eventDate]), [
+    ['Punk night', 'save', '2026-11-20'],
+    ['Rusalka', 'dislike', '2026-11-20'],
+  ]);
+  taste.rate(punk!, null);
+  assert.deepEqual(taste.history().map((e) => e.title), ['Rusalka']);
+  assert.equal(taste.rate(punk!, 'like'), false, 'nothing is left to rate');
+});

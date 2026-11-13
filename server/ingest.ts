@@ -72,7 +72,7 @@ export function ingest(store: Store, source: string, result: FetchResult, at: { 
         findEvent(store, source, item, key) ??
         findByTitleAndTime(store, source, item, key) ??
         store.createEvent(at.now);
-      store.saveRecord(eventId, source, item, key, at.now, at.placeId ?? 0);
+      store.saveRecord(eventId, source, item, key, at, at.placeId ?? 0);
     }
     const removed = store.removeMissing(source, seen, at.today, result.coveredUntil);
     return { saved: seen.size, removed };

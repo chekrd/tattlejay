@@ -1,6 +1,6 @@
 import type { When } from '../../server/contract.ts';
 
-export type Preset = 'today' | 'weekend' | 'week' | 'range';
+export type Preset = 'past' | 'today' | 'weekend' | 'week' | 'range';
 
 export interface Range {
   from: string;
@@ -21,6 +21,7 @@ export function addDays(date: string, days: number): string {
 
 // The weekend starts on Friday, when most evening events of a weekend begin.
 export function presetRange(preset: Exclude<Preset, 'range'>, today: string): Range {
+  if (preset === 'past') return { from: addDays(today, -7), to: addDays(today, -1) };
   if (preset === 'today') return { from: today, to: today };
   if (preset === 'week') return { from: today, to: addDays(today, 6) };
   const weekday = utc(today).getUTCDay();

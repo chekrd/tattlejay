@@ -4,6 +4,7 @@ import { agoLabel, dayLabel, presetRange, timeLabel } from './dates.ts';
 
 test('preset ranges', () => {
   assert.deepEqual(presetRange('today', '2026-11-13'), { from: '2026-11-13', to: '2026-11-13' });
+  assert.deepEqual(presetRange('past', '2026-11-03'), { from: '2026-10-27', to: '2026-11-02' });
   assert.deepEqual(presetRange('week', '2026-11-13'), { from: '2026-11-13', to: '2026-11-19' });
   assert.deepEqual(presetRange('weekend', '2026-11-10'), { from: '2026-11-13', to: '2026-11-15' });
   assert.deepEqual(presetRange('weekend', '2026-11-13'), { from: '2026-11-13', to: '2026-11-15' });

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { USER_AGENT } from '../config.ts';
 import type { Category } from '../contract.ts';
-import { daysBetween } from '../dates.ts';
+import { addDays, daysBetween } from '../dates.ts';
 import { collapse, decodeEntities, plainText, truncate } from '../text.ts';
 import type { FetchContext, FetchResult, Source, SourceItem } from './types.ts';
 
@@ -10,6 +10,8 @@ const PAGE_SIZE = 1000;
 const MAX_PAGES = 10;
 // The feed also lists standing services (guided tours "from 2021 to 2050"), which are not events.
 const MAX_SPAN_DAYS = 366;
+// The feed still carries what ended a day or so ago. It is taken, so the past week can be looked back on.
+const KEEP_PAST_DAYS = 7;
 
 const Attributes = z.object({
   ID: z.number(),
@@ -74,7 +76,7 @@ export function parseCityFeed(features: unknown[], today: string): SourceItem[] 
     const a = parsed.data;
     const startDate = day(a.date_from);
     const endDate = a.date_to != null && a.date_to >= a.date_from ? day(a.date_to) : startDate;
-    if (endDate < today || daysBetween(startDate, endDate) > MAX_SPAN_DAYS) continue;
+    if (endDate < addDays(today, -KEEP_PAST_DAYS) || daysBetween(startDate, endDate) > MAX_SPAN_DAYS) continue;
     const tags = (a.categories ?? '').split(',').map(collapse).filter(Boolean);
     const description = plainText(a.text ?? '');
     items.push({

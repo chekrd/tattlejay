@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { Category, RatingValue, Taste, TasteStatus } from './contract.ts';
+import type { Category, HistoryEntry, RatingValue, Taste, TasteStatus } from './contract.ts';
 import { today } from './dates.ts';
 import type { RatedEvent, Score, Store, StoredRecord } from './db.ts';
 import type { Ask } from './model.ts';
@@ -176,13 +176,15 @@ export function createTaste(store: Store, deps: TasteDeps) {
       return running;
     },
 
-    rate(eventId: number, value: RatingValue | null): boolean {
+    // `shownDate` is the date on the card the person rated, which for a series is not always its next one.
+    rate(eventId: number, value: RatingValue | null, shownDate?: string): boolean {
+      const facts = store.factsOf(eventId);
+      const first = facts[0];
+      const before = store.ratings().get(eventId);
       if (value === null) {
         store.rate(eventId, null, deps.now());
-      } else {
-        const facts = store.factsOf(eventId);
-        const first = facts[0];
-        if (!first) return false;
+      } else if (first) {
+        const spans = store.spansOf(eventId).sort((a, b) => a.startDate.localeCompare(b.startDate));
         store.rate(
           eventId,
           {
@@ -191,9 +193,16 @@ export function createTaste(store: Store, deps: TasteDeps) {
             venue: facts.find((f) => f.venue)?.venue ?? null,
             category: facts.find((f) => f.category !== 'Other')?.category ?? 'Other',
             tags: [...new Set(facts.flatMap((f) => f.tags))],
+            eventDate: shownDate ?? (spans.find((s) => s.endDate >= day()) ?? spans.at(-1))?.startDate ?? null,
+            url: first.url || null,
           },
           deps.now(),
         );
+      } else if (before) {
+        // The event's own rows are gone; what was kept when it was first rated stands, with the new verdict.
+        store.rate(eventId, { ...before, value }, deps.now());
+      } else {
+        return false;
       }
       inputChanged();
       return true;
@@ -213,6 +222,12 @@ export function createTaste(store: Store, deps: TasteDeps) {
     },
 
     taste: (): Taste => ({ seed: seed(), profile: profile(), rules: store.rules(), rated: store.ratings().size }),
+
+    // Everything the person has reacted to, latest reaction first.
+    history: (): HistoryEntry[] =>
+      [...store.ratings()]
+        .map(([eventId, r]) => ({ eventId, value: r.value, at: r.at, title: r.title, venue: r.venue, category: r.category, eventDate: r.eventDate, url: r.url }))
+        .reverse(),
 
     status(): TasteStatus {
       const ready = profile() !== '';

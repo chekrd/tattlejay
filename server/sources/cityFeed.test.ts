@@ -41,10 +41,11 @@ test('turns a row into an item', () => {
   });
 });
 
-test('skips what is over, standing services and broken rows', () => {
+test('skips what ended over a week ago, standing services and broken rows', () => {
   const items = parseCityFeed(
     [
-      row({ ID: 1, date_from: day('2026-11-01'), date_to: day('2026-11-12') }),
+      row({ ID: 1, date_from: day('2026-11-01'), date_to: day('2026-11-05') }),
+      row({ ID: 5, date_from: day('2026-11-12'), date_to: day('2026-11-12') }),
       row({ ID: 2, date_from: day('2021-01-01'), date_to: day('2050-12-31') }),
       row({ ID: 3, name: '' }),
       { nonsense: true },
@@ -54,7 +55,10 @@ test('skips what is over, standing services and broken rows', () => {
   );
   assert.deepEqual(
     items.map((i) => [i.key, i.occurrences[0]]),
-    [['4', { startDate: '2026-09-01', startTime: null, endDate: '2027-02-14', endTime: null }]],
+    [
+      ['5', { startDate: '2026-11-12', startTime: null, endDate: '2026-11-12', endTime: null }],
+      ['4', { startDate: '2026-09-01', startTime: null, endDate: '2027-02-14', endTime: null }],
+    ],
   );
 });
 

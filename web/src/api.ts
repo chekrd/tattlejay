@@ -1,4 +1,4 @@
-import type { Capture, Category, EventView, PagePreview, Picks, RatingValue, Rule, Status, Taste, Visit } from '../../server/contract.ts';
+import type { Capture, Category, EventView, HistoryEntry, PagePreview, Picks, RatingValue, Rule, Status, Taste, Visit } from '../../server/contract.ts';
 import type { Range } from './dates.ts';
 
 export interface EventQuery extends Range {
@@ -30,6 +30,7 @@ export async function fetchEvents(q: EventQuery, signal: AbortSignal): Promise<E
 }
 
 export const fetchPlans = async (signal: AbortSignal) => (await get<{ events: EventView[] }>('/api/plans', signal)).events;
+export const fetchHistory = async (signal: AbortSignal) => (await get<{ entries: HistoryEntry[] }>('/api/history', signal)).entries;
 export const fetchStarter = async (signal: AbortSignal) => (await get<{ events: EventView[] }>('/api/starter', signal)).events;
 export const fetchPicks = (placeId: number, signal: AbortSignal) => get<Picks>(`/api/picks?place=${placeId}`, signal);
 export const fetchTaste = (signal: AbortSignal) => get<Taste>('/api/taste', signal);
@@ -37,7 +38,7 @@ export const fetchStatus = (signal: AbortSignal) => get<Status>('/api/status', s
 
 export const requestRefresh = () => send<Status>('POST', '/api/refresh');
 export const requestPicks = () => send<Status>('POST', '/api/taste/refresh');
-export const rate = (eventId: number, value: RatingValue | null) => send<unknown>('PUT', `/api/events/${eventId}/rating`, { value });
+export const rate = (eventId: number, value: RatingValue | null, date: string | null) => send<unknown>('PUT', `/api/events/${eventId}/rating`, date ? { value, date } : { value });
 export const saveTaste = (change: { seed?: string; profile?: string }) => send<Taste>('PUT', '/api/taste', change);
 export const addRule = (text: string, verdict: Rule['verdict']) => send<Taste>('POST', '/api/taste/rules', { text, verdict });
 export const removeRule = (id: number) => send<Taste>('DELETE', `/api/taste/rules/${id}`);

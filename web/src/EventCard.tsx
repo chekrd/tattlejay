@@ -20,8 +20,13 @@ export function Linked({ url, children }: { url: string | undefined; children: R
   );
 }
 
-export function RatingButtons({ event, onChanged }: { event: EventView; onChanged: () => void }) {
-  const choose = (value: RatingValue) => void rate(event.id, event.rating === value ? null : value).then(onChanged, onChanged);
+interface Rated extends Pick<EventView, 'id' | 'title' | 'rating'> {
+  // The date shown with the event where it is being rated.
+  date: string | null;
+}
+
+export function RatingButtons({ event, onChanged }: { event: Rated; onChanged: () => void }) {
+  const choose = (value: RatingValue) => void rate(event.id, event.rating === value ? null : value, event.date).then(onChanged, onChanged);
   return (
     <span className="rating" role="group" aria-label={`Rate ${event.title}`}>
       {ACTIONS.map((a) => (
@@ -78,7 +83,7 @@ export function EventCard({ event, onChanged, showDay, marksUnscored, showReason
           </span>
         </p>
         <p className="actions">
-          <RatingButtons event={event} onChanged={onChanged} />
+          <RatingButtons event={{ ...event, date: event.when.startDate }} onChanged={onChanged} />
           {extra}
         </p>
       </div>

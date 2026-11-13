@@ -124,7 +124,7 @@ export function TastePanel({ today, status, revision, onChanged, onRefreshPicks 
                   <Linked url={event.sources[0]?.url}>{event.title}</Linked>
                   <span className="where">{[event.category, event.venue, dayLabel(event.when.startDate, today)].filter(Boolean).join(' · ')}</span>
                 </span>
-                <RatingButtons event={event} onChanged={onChanged} />
+                <RatingButtons event={{ ...event, date: event.when.startDate }} onChanged={onChanged} />
               </li>
             ))}
           </ul>

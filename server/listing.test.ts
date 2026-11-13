@@ -109,7 +109,7 @@ test('links to the source record for the shown day', () => {
 });
 
 const opinions = (over: Partial<Opinions>): Opinions => ({ ...NO_OPINIONS, ...over });
-const rated = (value: 'like' | 'dislike' | 'save') => ({ value, title: 'x', venue: null, category: 'Music' as const, tags: [] });
+const rated = (value: 'like' | 'dislike' | 'save') => ({ value, title: 'x', venue: null, category: 'Music' as const, tags: [], eventDate: null, url: null });
 
 test('dislikes and never rules hide, and can be shown again', () => {
   const records = [record(1), record(2, { title: 'Opera gala', venue: 'Janáčkovo divadlo' }), record(3, { venue: 'Fléda' }), record(4)];

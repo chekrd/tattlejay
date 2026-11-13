@@ -113,6 +113,11 @@ const MIGRATIONS = [
   `
   ALTER TABLE record ADD COLUMN place_id INTEGER NOT NULL DEFAULT 0;
   `,
+  // What the history shows of a rated event once its own rows are gone: the day it was on and where to read about it.
+  `
+  ALTER TABLE rating ADD COLUMN event_date TEXT;
+  ALTER TABLE rating ADD COLUMN url TEXT;
+  `,
 ];
 
 function migrate(db: DatabaseSync) {
@@ -176,6 +181,9 @@ export interface RatedEvent {
   venue: string | null;
   category: Category;
   tags: string[];
+  // The date the event was on when it was rated: its next one, or its last if all had passed.
+  eventDate: string | null;
+  url: string | null;
 }
 
 export interface Score {
@@ -238,8 +246,12 @@ export function openStore(path: string) {
       place_id = excluded.place_id
     RETURNING id
   `);
-  const clearOccurrences = db.prepare('DELETE FROM occurrence WHERE record_id = ?');
-  const addOccurrence = db.prepare('INSERT INTO occurrence (record_id, start_date, start_time, end_date, end_time) VALUES (?, ?, ?, ?, ?)');
+  const clearOccurrences = db.prepare('DELETE FROM occurrence WHERE record_id = ? AND end_date >= ?');
+  const addOccurrence = db.prepare(`
+    INSERT INTO occurrence (record_id, start_date, start_time, end_date, end_time)
+    SELECT ?1, ?2, ?3, ?4, ?5
+    WHERE NOT EXISTS (SELECT 1 FROM occurrence WHERE record_id = ?1 AND start_date = ?2 AND start_time IS ?3 AND end_date = ?4)
+  `);
   const current = db.prepare(`
     SELECT r.id, r.key, MIN(o.start_date) AS next
     FROM record r JOIN occurrence o ON o.record_id = r.id
@@ -261,11 +273,11 @@ export function openStore(path: string) {
       last_ok_at = excluded.last_ok_at, last_error = excluded.last_error, last_count = excluded.last_count
   `);
 
-  const factsOf = db.prepare('SELECT title, venue, category, tags FROM record WHERE event_id = ? ORDER BY id');
+  const factsOf = db.prepare('SELECT title, venue, category, tags, url FROM record WHERE event_id = ? ORDER BY id');
   const upcomingIds = db.prepare(
     'SELECT DISTINCT r.event_id FROM record r JOIN occurrence o ON o.record_id = r.id WHERE o.end_date >= ?',
   );
-  const ratings = db.prepare('SELECT event_id, value, title, venue, category, tags FROM rating ORDER BY at');
+  const ratings = db.prepare('SELECT event_id, value, at, title, venue, category, tags, event_date, url FROM rating ORDER BY at');
   const places = db.prepare('SELECT id, name, lat, lon, radius_km FROM place ORDER BY visited_at DESC');
   const savePlace = db.prepare(`
     INSERT INTO place (name, lat, lon, radius_km, visited_at) VALUES (?, ?, ?, ?, ?)
@@ -280,9 +292,10 @@ export function openStore(path: string) {
   const removeRecordsOf = db.prepare('DELETE FROM record WHERE source = ?');
   const removeStateOf = db.prepare('DELETE FROM source_state WHERE source = ?');
   const rate = db.prepare(`
-    INSERT INTO rating (event_id, value, at, title, venue, category, tags) VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO rating (event_id, value, at, title, venue, category, tags, event_date, url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT (event_id) DO UPDATE SET value = excluded.value, at = excluded.at, title = excluded.title,
-      venue = excluded.venue, category = excluded.category, tags = excluded.tags
+      venue = excluded.venue, category = excluded.category, tags = excluded.tags, event_date = excluded.event_date,
+      url = excluded.url
   `);
   const unrate = db.prepare('DELETE FROM rating WHERE event_id = ?');
   const scores = db.prepare('SELECT event_id, score, reason FROM score WHERE profile_version = ?');
@@ -322,22 +335,32 @@ export function openStore(path: string) {
     },
 
     factsOf(eventId: number) {
-      return factsOf.all(eventId).map((r) => ({ title: String(r.title), venue: text(r.venue), category: category(r.category), tags: tagList(r.tags) }));
+      return factsOf.all(eventId).map((r) => ({ title: String(r.title), venue: text(r.venue), category: category(r.category), tags: tagList(r.tags), url: String(r.url) }));
     },
 
     upcomingIds: (from: string) => upcomingIds.all(from).map((r) => Number(r.event_id)),
 
-    ratings(): Map<number, RatedEvent> {
+    // Oldest reaction first.
+    ratings(): Map<number, RatedEvent & { at: number }> {
       return new Map(
         ratings.all().map((r) => [
           Number(r.event_id),
-          { value: ratingValue(r.value), title: String(r.title), venue: text(r.venue), category: category(r.category), tags: tagList(r.tags) },
+          {
+            value: ratingValue(r.value),
+            at: Number(r.at),
+            title: String(r.title),
+            venue: text(r.venue),
+            category: category(r.category),
+            tags: tagList(r.tags),
+            eventDate: text(r.event_date),
+            url: text(r.url),
+          },
         ]),
       );
     },
 
     rate(eventId: number, rated: RatedEvent | null, now: number) {
-      if (rated) rate.run(eventId, rated.value, now, rated.title, rated.venue, rated.category, JSON.stringify(rated.tags));
+      if (rated) rate.run(eventId, rated.value, now, rated.title, rated.venue, rated.category, JSON.stringify(rated.tags), rated.eventDate, rated.url);
       else unrate.run(eventId);
     },
 
@@ -401,7 +424,9 @@ export function openStore(path: string) {
 
     createEvent: (now: number) => Number(createEvent.run(now).lastInsertRowid),
 
-    saveRecord(eventId: number, source: string, item: SourceItem, titleKey: string, now: number, placeId: number) {
+    // Dates still ahead are replaced by what the source says now. Dates that have passed are kept: sources stop
+    // listing them, and they are what "what was on last week" is made of.
+    saveRecord(eventId: number, source: string, item: SourceItem, titleKey: string, at: { now: number; today: string }, placeId: number) {
       const row = saveRecord.get(
         eventId,
         source,
@@ -419,11 +444,11 @@ export function openStore(path: string) {
         item.url,
         item.description,
         item.imageUrl,
-        now,
+        at.now,
         placeId,
       );
       const id = Number(row?.id);
-      clearOccurrences.run(id);
+      clearOccurrences.run(id, at.today);
       for (const o of item.occurrences) addOccurrence.run(id, o.startDate, o.startTime, o.endDate, o.endTime);
     },
 

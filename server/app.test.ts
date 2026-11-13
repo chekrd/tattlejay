@@ -103,6 +103,14 @@ test('rating, picks, plans, hidden events and the calendar entry', async () => {
   assert.equal((await put(`/api/events/${a}/rating`, { value: 'save' })).status, 200);
   assert.equal((await put(`/api/events/${b}/rating`, { value: 'dislike' })).status, 200);
   assert.equal((await put(`/api/events/${a}/rating`, { value: 'love' })).status, 400);
+  assert.equal((await put(`/api/events/${c}/rating`, { value: 'like', date: 'soon' })).status, 400);
+  assert.equal((await put(`/api/events/${c}/rating`, { value: 'like', date: '2026-12-20' })).status, 200);
+  assert.deepEqual((await get<{ entries: { title: string; value: string; eventDate: string }[] }>('/api/history')).entries.map((e) => [e.title, e.value, e.eventDate]), [
+    ['Event c', 'like', '2026-12-20'],
+    ['Event b', 'dislike', '2026-11-19'],
+    ['Event a', 'save', '2026-11-14'],
+  ]);
+  assert.equal((await put(`/api/events/${c}/rating`, { value: null })).status, 200);
   assert.equal((await put('/api/events/9999/rating', { value: 'like' })).status, 404);
 
   assert.deepEqual((await get<{ events: { id: number }[] }>('/api/plans')).events.map((e) => e.id), [a]);

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Status } from '../../server/contract.ts';
 import { requestPicks, requestRefresh } from './api.ts';
 import { agoLabel, localDay } from './dates.ts';
+import { History } from './History.tsx';
 import { useStatus } from './hooks.ts';
 import { PlacePicker } from './PlacePicker.tsx';
 import { Plans } from './Plans.tsx';
@@ -9,11 +10,12 @@ import { Sources } from './Sources.tsx';
 import { TastePanel } from './TastePanel.tsx';
 import { WhatsOn } from './WhatsOn.tsx';
 
-type Tab = 'on' | 'plans' | 'taste' | 'sources';
+type Tab = 'on' | 'plans' | 'history' | 'taste' | 'sources';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'on', label: "What's on" },
   { id: 'plans', label: 'My plans' },
+  { id: 'history', label: 'History' },
   { id: 'taste', label: 'My taste' },
   { id: 'sources', label: 'Sources' },
 ];
@@ -75,6 +77,7 @@ export function App() {
 
       {tab === 'on' && <WhatsOn {...shared} onOpenTaste={() => setTab('taste')} onRefreshPicks={refreshPicks} />}
       {tab === 'plans' && <Plans today={today} revision={revision} onChanged={changed} />}
+      {tab === 'history' && <History today={today} revision={revision} onChanged={changed} />}
       {tab === 'taste' && <TastePanel {...shared} onRefreshPicks={refreshPicks} />}
       {tab === 'sources' && status && <Sources status={status} today={today} onRefresh={refreshSources} onStatus={setStatus} onChanged={changed} />}
 

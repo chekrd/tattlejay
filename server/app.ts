@@ -39,7 +39,7 @@ const isLocal = (url: string | undefined) => {
   }
 };
 
-const RatingBody = z.object({ value: z.enum(RATING_VALUES).nullable() });
+const RatingBody = z.object({ value: z.enum(RATING_VALUES).nullable(), date: z.string().refine(isDate).optional() });
 const TasteBody = z.object({ seed: z.string().max(2000).optional(), profile: z.string().max(4000).optional() });
 const RuleBody = z.object({ text: z.string().trim().min(2).max(80), verdict: z.enum(['always', 'never']) });
 const PageBody = z.object({ url: z.string().min(1).max(2000), label: z.string().max(120).optional() });
@@ -119,8 +119,8 @@ export function createApp({ store, poller, taste, pages, visits, sources, timeZo
 
   app.put('/api/events/:id/rating', async (c) => {
     const body = RatingBody.safeParse(await c.req.json().catch(() => null));
-    if (!body.success) return c.json({ error: 'value must be like, dislike, save or null' }, 400);
-    if (!taste.rate(Number(c.req.param('id')), body.data.value)) return c.json({ error: 'no such event' }, 404);
+    if (!body.success) return c.json({ error: 'value must be like, dislike, save or null, and date a day' }, 400);
+    if (!taste.rate(Number(c.req.param('id')), body.data.value, body.data.date)) return c.json({ error: 'no such event' }, 404);
     return c.json({ ok: true });
   });
 
@@ -133,6 +133,8 @@ export function createApp({ store, poller, taste, pages, visits, sources, timeZo
       'content-disposition': `attachment; filename="event-${id}.ics"`,
     });
   });
+
+  app.get('/api/history', (c) => c.json({ entries: taste.history() }));
 
   app.get('/api/taste', (c) => c.json(taste.taste()));
 

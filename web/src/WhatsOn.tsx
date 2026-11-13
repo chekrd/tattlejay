@@ -6,6 +6,7 @@ import { EventCard } from './EventCard.tsx';
 import { useLoad } from './hooks.ts';
 
 const PRESETS: { id: Preset; label: string }[] = [
+  { id: 'past', label: 'Past 7 days' },
   { id: 'today', label: 'Today' },
   { id: 'weekend', label: 'This weekend' },
   { id: 'week', label: 'This week' },
@@ -79,8 +80,20 @@ function PickedForYou({ today, status, revision, placeId, onChanged, onOpenTaste
   );
 }
 
-function Days({ events, today, onChanged, marksUnscored }: { events: EventView[]; today: string; onChanged: () => void; marksUnscored: boolean }) {
-  if (events.length === 0) return <p className="empty">Nothing found for these dates and filters.</p>;
+interface DaysProps {
+  events: EventView[];
+  today: string;
+  onChanged: () => void;
+  marksUnscored: boolean;
+  // Looking back: only what is over, latest day first.
+  past: boolean;
+}
+
+function Days({ events: all, today, onChanged, marksUnscored, past }: DaysProps) {
+  const events = past ? all.filter((e) => e.when.endDate < today) : all;
+  if (events.length === 0) {
+    return <p className="empty">{past ? 'Nothing from the past week. Only events the app had already read before they happened can show here.' : 'Nothing found for these dates and filters.'}</p>;
+  }
 
   const days: { heading: string; events: EventView[] }[] = [];
   const running: EventView[] = [];
@@ -95,6 +108,7 @@ function Days({ events, today, onChanged, marksUnscored }: { events: EventView[]
     else days.push({ heading, events: [event] });
   }
   if (running.length > 0) days.push({ heading: 'Already running', events: running });
+  if (past) days.reverse();
 
   return (
     <>
@@ -185,7 +199,7 @@ export function WhatsOn(props: Shared & { onOpenTaste: () => void; onRefreshPick
       <main aria-busy={listing.data === undefined && listing.error === undefined}>
         {listing.error && <p className="empty warn">The listing could not be loaded: {listing.error}</p>}
         {listing.data === undefined && !listing.error && <p className="empty">Loading…</p>}
-        {listing.data && <Days events={listing.data} today={today} onChanged={onChanged} marksUnscored={status?.taste.ready ?? false} />}
+        {listing.data && <Days events={listing.data} today={today} onChanged={onChanged} marksUnscored={preset !== 'past' && (status?.taste.ready ?? false)} past={preset === 'past'} />}
       </main>
     </>
   );

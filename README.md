@@ -21,6 +21,11 @@ Like, dislike or save events, and say what you like in your own words under **My
 short written taste profile, which you can read and edit, and scores every upcoming event against it. The strongest
 unrated matches show as **Picked for you**, each with its reason.
 
+**Past 7 days** in the listing shows what was on over the last week, latest day first, so you can rate what you went
+to. It can only show events the app had already read before they happened, so it fills up as the app is used.
+**History** lists every event you have reacted to, latest reaction first, and stays complete after an event is over or
+its source has dropped it; a reaction can be changed or taken back there.
+
 The writing and scoring are done by the Claude CLI (`claude -p`) under your own login, on Sonnet, as a plain
 completion: no tools, no settings, no plugins, run from an empty folder of the app's own. It runs once a day after the
 sources are read, and when you press **Refresh my picks**. A full scoring pass sends about one call per 50 events.
