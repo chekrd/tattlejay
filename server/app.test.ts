@@ -28,7 +28,7 @@ const item = (key: string, date: string): SourceItem => ({
 
 function setup(fetchItems: Source['fetchItems']) {
   const store = openStore(':memory:');
-  const sources: Source[] = [{ id: 'fake', label: 'Fake', fetchItems }];
+  const sources: Source[] = [{ id: 'fake', label: 'Fake', home: 'https://example.test/', neverEmpty: true, fetchItems }];
   const poller = createPoller(store, sources, { fetch, pause: async () => {}, now: () => NOW, place: PLACE, timeZone: TIME_ZONE, everyMs: 3_600_000 });
   const taste = createTaste(store, {
     ask: async (prompt, system) =>
@@ -53,7 +53,7 @@ test('a poll lands in the listing, which defaults to the week from today', async
   assert.deepEqual(body.events.map((e) => e.title), ['Event a', 'Event b']);
 
   const status = (await (await app.request('http://127.0.0.1/api/status')).json()) as { sources: unknown[] };
-  assert.deepEqual(status.sources, [{ id: 'fake', label: 'Fake', lastOkAt: NOW, lastError: null, lastCount: 3 }]);
+  assert.deepEqual(status.sources, [{ id: 'fake', label: 'Fake', home: 'https://example.test/', lastOkAt: NOW, lastError: null, lastCount: 3 }]);
 });
 
 test('a source that is not due is left alone, and a failing one keeps its events', async () => {

@@ -78,6 +78,30 @@ test('the same title a few streets apart is one event only on a shared day', () 
   ]);
 });
 
+test('without coordinates, the same title at the same minute is one event', () => {
+  const store = openStore(':memory:');
+  ingest(store, 'goout', { items: [item({ key: 'm', title: 'AI 4 DEV @ Brno' }, '2026-11-20', '18:00'), item({ key: 'n', title: 'Pyvo' }, '2026-11-20', '19:00')], coveredUntil: null }, at);
+  ingest(
+    store,
+    'city',
+    {
+      items: [
+        item({ key: '1', title: 'AI 4 DEV @ Brno', lat: null, lon: null }, '2026-11-20', '18:00'),
+        item({ key: '2', title: 'Pyvo', lat: null, lon: null }, '2026-11-20', '18:30'),
+        item({ key: '3', title: 'Pyvo', lat: null, lon: null }, '2026-11-20'),
+      ],
+      coveredUntil: null,
+    },
+    at,
+  );
+  assert.deepEqual(
+    listing(store)
+      .map((e) => `${e.title} from ${e.sources.length}`)
+      .sort((a, b) => a.localeCompare(b)),
+    ['AI 4 DEV @ Brno from 2', 'Pyvo from 1', 'Pyvo from 1', 'Pyvo from 1'],
+  );
+});
+
 test('uncertain matches stay separate', () => {
   const store = openStore(':memory:');
   ingest(store, 'city', { items: [item({ key: '1', title: 'Vypsaná fixa' })], coveredUntil: null }, at);

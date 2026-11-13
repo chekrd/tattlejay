@@ -32,8 +32,9 @@ export function createPoller(store: Store, sources: Source[], deps: PollerDeps) 
       try {
         const day = today(deps.timeZone, new Date(started));
         const result = await source.fetchItems({ fetch: deps.fetch, pause: deps.pause, today: day, place: deps.place });
-        // An empty answer is far likelier a broken feed than a city with nothing on, and would drop every known event.
-        if (result.items.length === 0) throw new Error('returned no events');
+        // From a source that always has something on, an empty answer means a broken feed, and taking it at its word
+        // would drop every event known from it.
+        if (source.neverEmpty && result.items.length === 0) throw new Error('returned no events');
         const { saved, removed } = ingest(store, source.id, result, { today: day, now: deps.now() });
         store.setSourceState(source.id, { lastOkAt: deps.now(), lastError: null, lastCount: saved });
         console.log(`${source.id}: ${saved} events, ${removed} removed`);

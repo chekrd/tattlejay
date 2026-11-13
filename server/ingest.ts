@@ -29,6 +29,20 @@ function findEvent(store: Store, source: string, item: SourceItem, key: string):
   return onSharedDay;
 }
 
+// Where one of two sources gives no coordinates, place cannot vouch for a match. The same title starting at the same
+// minute in two sources can: a community calendar re-listing a meetup, a ticket seller listing a theatre's night.
+function findByTitleAndTime(store: Store, source: string, item: SourceItem, key: string): number | undefined {
+  const timed = item.occurrences.filter((o) => o.startTime !== null);
+  if (timed.length === 0) return undefined;
+  for (const other of store.titled(key)) {
+    if (other.source === source || (other.placed && item.lat !== null)) continue;
+    if (store.sourcesOf(other.eventId).includes(source)) continue;
+    const spans = store.spansOf(other.eventId);
+    if (timed.some((o) => spans.some((s) => s.startDate === o.startDate && s.startTime === o.startTime))) return other.eventId;
+  }
+  return undefined;
+}
+
 export function ingest(store: Store, source: string, result: FetchResult, at: { today: string; now: number }) {
   return store.transaction(() => {
     const seen = new Set<string>();
@@ -36,7 +50,11 @@ export function ingest(store: Store, source: string, result: FetchResult, at: { 
       if (seen.has(item.key)) continue;
       seen.add(item.key);
       const key = titleKey(item.title);
-      const eventId = store.recordOf(source, item.key)?.eventId ?? findEvent(store, source, item, key) ?? store.createEvent(at.now);
+      const eventId =
+        store.recordOf(source, item.key)?.eventId ??
+        findEvent(store, source, item, key) ??
+        findByTitleAndTime(store, source, item, key) ??
+        store.createEvent(at.now);
       store.saveRecord(eventId, source, item, key, at.now);
     }
     const removed = store.removeMissing(source, seen, at.today, result.coveredUntil);

@@ -36,5 +36,19 @@ export interface FetchResult {
 export interface Source {
   id: string;
   label: string;
+  // Where a person would look at this source.
+  home: string;
+  // A source that always has something on: an empty answer from it means the feed broke, not that nothing is on.
+  neverEmpty?: boolean;
   fetchItems(ctx: FetchContext): Promise<FetchResult>;
 }
+
+// Where a single-venue source happens, for sources that do not say.
+export interface Venue {
+  venue: string;
+  address: string;
+  lat: number | null;
+  lon: number | null;
+}
+
+export const byStart = (a: When, b: When) => a.startDate.localeCompare(b.startDate) || (a.startTime ?? '').localeCompare(b.startTime ?? '');

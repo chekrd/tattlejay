@@ -23,6 +23,13 @@ export function localDateTime(instant: Date, timeZone: string): { date: string; 
   return { date: `${parts.year}-${parts.month}-${parts.day}`, time: `${parts.hour}:${parts.minute}` };
 }
 
+// The local date and time of an ISO timestamp, or undefined when it cannot be read.
+export function localOf(iso: string | null | undefined, timeZone: string): { date: string; time: string } | undefined {
+  if (!iso) return undefined;
+  const instant = new Date(iso);
+  return Number.isNaN(instant.getTime()) ? undefined : localDateTime(instant, timeZone);
+}
+
 export const today = (timeZone: string, now = new Date()) => localDateTime(now, timeZone).date;
 
 export function addDays(date: string, days: number): string {

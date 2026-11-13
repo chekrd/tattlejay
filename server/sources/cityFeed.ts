@@ -117,4 +117,4 @@ async function fetchItems({ fetch, today }: FetchContext): Promise<FetchResult> 
   return { items: parseCityFeed(features, today), coveredUntil: null };
 }
 
-export const cityFeed: Source = { id: 'brno-city', label: 'gotobrno.cz', fetchItems };
+export const cityFeed: Source = { id: 'brno-city', label: 'gotobrno.cz', home: 'https://www.gotobrno.cz/kalendar-akci/', neverEmpty: true, fetchItems };

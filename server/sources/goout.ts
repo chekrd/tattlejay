@@ -225,4 +225,4 @@ async function fetchItems({ fetch, pause, today, place }: FetchContext): Promise
   return { items: buildItems(schedules, events, venues), coveredUntil: reachedEnd ? null : lastDay };
 }
 
-export const goout: Source = { id: 'goout', label: 'GoOut', fetchItems };
+export const goout: Source = { id: 'goout', label: 'GoOut', home: 'https://goout.net/cs/brno/akce/lezjyvlkk/', neverEmpty: true, fetchItems };

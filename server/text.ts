@@ -10,6 +10,18 @@ const NAMED: Record<string, string> = {
   hellip: '…',
 };
 
+// Accented letters are named letter + accent (&iacute;, &scaron;): built from the letter and its combining mark.
+const MARKS: Record<string, string> = {
+  acute: '́',
+  caron: '̌',
+  uml: '̈',
+  ring: '̊',
+  grave: '̀',
+  circ: '̂',
+  tilde: '̃',
+  cedil: '̧',
+};
+
 export function decodeEntities(s: string): string {
   return s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (whole, body: string) => {
     if (body.startsWith('#')) {
@@ -17,6 +29,8 @@ export function decodeEntities(s: string): string {
       const code = Number.parseInt(body.slice(hex ? 2 : 1), hex ? 16 : 10);
       return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : whole;
     }
+    const accented = /^([A-Za-z])(acute|caron|uml|ring|grave|circ|tilde|cedil)$/.exec(body);
+    if (accented) return `${accented[1]}${MARKS[accented[2]!]}`.normalize('NFC');
     return NAMED[body.toLowerCase()] ?? whole;
   });
 }

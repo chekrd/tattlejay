@@ -170,8 +170,9 @@ export function openStore(path: string) {
   );
   const sourcesOf = db.prepare('SELECT DISTINCT source FROM record WHERE event_id = ?');
   const spansOf = db.prepare(
-    'SELECT o.start_date, o.end_date FROM occurrence o JOIN record r ON r.id = o.record_id WHERE r.event_id = ?',
+    'SELECT o.start_date, o.start_time, o.end_date FROM occurrence o JOIN record r ON r.id = o.record_id WHERE r.event_id = ?',
   );
+  const titled = db.prepare('SELECT event_id, source, lat FROM record WHERE title_key = ?');
   const createEvent = db.prepare('INSERT INTO event (first_seen_at) VALUES (?)');
   const saveRecord = db.prepare(`
     INSERT INTO record (event_id, source, key, title, title_key, venue, address, lat, lon, category, tags, price_text,
@@ -303,7 +304,10 @@ export function openStore(path: string) {
 
     sourcesOf: (eventId: number) => sourcesOf.all(eventId).map((r) => String(r.source)),
 
-    spansOf: (eventId: number) => spansOf.all(eventId).map((r) => ({ startDate: String(r.start_date), endDate: String(r.end_date) })),
+    spansOf: (eventId: number) =>
+      spansOf.all(eventId).map((r) => ({ startDate: String(r.start_date), startTime: text(r.start_time), endDate: String(r.end_date) })),
+
+    titled: (titleKey: string) => titled.all(titleKey).map((r) => ({ eventId: Number(r.event_id), source: String(r.source), placed: r.lat !== null })),
 
     createEvent: (now: number) => Number(createEvent.run(now).lastInsertRowid),
 

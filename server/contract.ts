@@ -71,6 +71,7 @@ export interface Picks {
 export interface SourceStatus {
   id: string;
   label: string;
+  home: string;
   lastOkAt: number | null;
   lastError: string | null;
   lastCount: number | null;

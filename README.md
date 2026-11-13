@@ -50,9 +50,22 @@ pnpm check        # types, lint, tests
 
 ## Sources
 
-| Source | What is kept |
-| --- | --- |
-| gotobrno.cz, through the city's open data (CC BY) | everything the feed gives; it has days but no start times |
-| GoOut | facts only: title, time, venue, price and the link. Descriptions and images stay on GoOut |
+| Source | How it is read | Notes |
+| --- | --- | --- |
+| gotobrno.cz | the city's open data feed (CC BY) | days but no start times |
+| GoOut | the endpoint its own pages call | facts only: title, time, venue, price, link |
+| Městské divadlo Brno | its programme API | one entry per production |
+| Kino Scala | events embedded in its front page | one entry per film |
+| Kino Art | its programme page | one entry per film |
+| Impact Hub Brno | its calendar API | |
+| Meetup | each listed group's events page | groups are listed in `server/sources/meetup.ts` |
+| Luma | calendar subscriptions | communities are listed in `server/sources/calendars.ts` |
+| Brno.AI | events embedded in its listing | only in-person events in or by Brno |
+| Pyvo, WUG Brno, Base48 | their calendar feeds | Base48's own meetings are left out |
+| Brno Expat Centre | its events feed | |
 
-The GoOut adapter reads the endpoint goout.net's own pages call, not a published API. Keep this app private.
+The **Sources** view shows when each was last read and how many events it gave. A source that fails keeps the events
+it gave last time and says what went wrong.
+
+The GoOut and Meetup adapters read data those sites embed for their own pages, not a published API. Keep this app
+private.

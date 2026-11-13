@@ -4,15 +4,17 @@ import { requestPicks, requestRefresh } from './api.ts';
 import { agoLabel, localDay } from './dates.ts';
 import { useStatus } from './hooks.ts';
 import { Plans } from './Plans.tsx';
+import { Sources } from './Sources.tsx';
 import { TastePanel } from './TastePanel.tsx';
 import { WhatsOn } from './WhatsOn.tsx';
 
-type Tab = 'on' | 'plans' | 'taste';
+type Tab = 'on' | 'plans' | 'taste' | 'sources';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'on', label: "What's on" },
   { id: 'plans', label: 'My plans' },
   { id: 'taste', label: 'My taste' },
+  { id: 'sources', label: 'Sources' },
 ];
 
 function SourcesLine({ status, onRefresh }: { status: Status; onRefresh: () => void }) {
@@ -75,10 +77,14 @@ export function App() {
       {tab === 'on' && <WhatsOn {...shared} onOpenTaste={() => setTab('taste')} onRefreshPicks={refreshPicks} />}
       {tab === 'plans' && <Plans today={today} revision={revision} onChanged={changed} />}
       {tab === 'taste' && <TastePanel {...shared} onRefreshPicks={refreshPicks} />}
+      {tab === 'sources' && status && <Sources status={status} onRefresh={refreshSources} />}
 
       <footer>
-        Event data from <a href="https://www.gotobrno.cz" target="_blank" rel="noreferrer">gotobrno.cz</a> (CC BY, via data.brno.cz) and{' '}
-        <a href="https://goout.net" target="_blank" rel="noreferrer">GoOut</a>. Follow a source link for full details and tickets.
+        City listings from <a href="https://www.gotobrno.cz" target="_blank" rel="noreferrer">gotobrno.cz</a> (CC BY, via data.brno.cz); the rest from the sites under{' '}
+        <button type="button" className="link" onClick={() => setTab('sources')}>
+          Sources
+        </button>
+        . Follow an event's source link for full details and tickets.
       </footer>
     </div>
   );

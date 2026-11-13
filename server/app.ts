@@ -59,7 +59,7 @@ export function createApp({ store, poller, taste, sources, place, timeZone, now 
   const status = (): Status => ({
     polling: poller.polling,
     place: { name: place.name, radiusKm: place.radiusKm },
-    sources: sources.map((s) => ({ id: s.id, label: s.label, ...store.sourceState(s.id) })),
+    sources: sources.map((s) => ({ id: s.id, label: s.label, home: s.home, ...store.sourceState(s.id) })),
     taste: taste.status(),
   });
 

@@ -5,6 +5,7 @@ import { compareTitles, decodeEntities, plainText, titleKey, truncate } from './
 test('decodes the entities the city feed uses', () => {
   assert.equal(decodeEntities('Symposium Brno &#8211; Konference o&nbsp;víně &amp; jídle'), 'Symposium Brno – Konference o víně & jídle');
   assert.equal(decodeEntities('&#x159;eka &unknown; &#0;'), 'řeka &unknown; &#0;');
+  assert.equal(decodeEntities('Uvid&iacute;&scaron; v&scaron;echno, &Uacute;st&iacute; &amp; K&ouml;ln'), 'Uvidíš všechno, Ústí & Köln');
 });
 
 test('plain text drops tags and collapses whitespace', () => {
