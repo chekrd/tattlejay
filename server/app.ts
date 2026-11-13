@@ -1,16 +1,20 @@
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
+import { z } from 'zod';
+import { toIcs } from './calendar.ts';
 import { type Place, WEB_DIST } from './config.ts';
-import { CATEGORIES, type Category, type EventView, type Status } from './contract.ts';
+import { CATEGORIES, type Category, RATING_VALUES, type Status } from './contract.ts';
 import { addDays, isDate, today } from './dates.ts';
 import type { Store } from './db.ts';
-import { listEvents } from './listing.ts';
+import { type ListQuery, listEvents, type Opinions, pickEvents, starterEvents } from './listing.ts';
 import type { Poller } from './poll.ts';
 import type { Source } from './sources/types.ts';
+import type { TasteService } from './taste.ts';
 
 export interface AppDeps {
   store: Store;
   poller: Poller;
+  taste: TasteService;
   sources: Source[];
   place: Place;
   timeZone: string;
@@ -18,6 +22,9 @@ export interface AppDeps {
 }
 
 const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost']);
+const FAR = '9999-12-31';
+const STARTER_COUNT = 30;
+const STARTER_DAYS = 60;
 
 const isLocal = (url: string | undefined) => {
   if (!url) return true;
@@ -28,9 +35,14 @@ const isLocal = (url: string | undefined) => {
   }
 };
 
-export function createApp({ store, poller, sources, place, timeZone, now }: AppDeps) {
+const RatingBody = z.object({ value: z.enum(RATING_VALUES).nullable() });
+const TasteBody = z.object({ seed: z.string().max(2000).optional(), profile: z.string().max(4000).optional() });
+const RuleBody = z.object({ text: z.string().trim().min(2).max(80), verdict: z.enum(['always', 'never']) });
+
+export function createApp({ store, poller, taste, sources, place, timeZone, now }: AppDeps) {
   const app = new Hono();
   const labels = new Map(sources.map((s) => [s.id, s.label]));
+  const day = () => today(timeZone, new Date(now()));
 
   // The server has no login; it answers only pages loaded from this machine under its own name, so a website open in
   // the same browser cannot reach it through a DNS name that points here.
@@ -39,25 +51,75 @@ export function createApp({ store, poller, sources, place, timeZone, now }: AppD
     return next();
   });
 
+  const opinions = (): Opinions => ({ ratings: store.ratings(), scores: store.scores(taste.profileVersion()), rules: store.rules() });
+
+  const list = (q: Partial<ListQuery> & Pick<ListQuery, 'from' | 'to'>) =>
+    listEvents(store.upcoming(q.from), labels, opinions(), { categories: [], freeOnly: false, place, ...q });
+
   const status = (): Status => ({
     polling: poller.polling,
     place: { name: place.name, radiusKm: place.radiusKm },
     sources: sources.map((s) => ({ id: s.id, label: s.label, ...store.sourceState(s.id) })),
+    taste: taste.status(),
   });
 
   app.get('/api/events', (c) => {
-    const from = c.req.query('from') ?? today(timeZone, new Date(now()));
+    const from = c.req.query('from') ?? day();
     const to = c.req.query('to') ?? (isDate(from) ? addDays(from, 6) : '');
     if (!isDate(from) || !isDate(to) || to < from) return c.json({ error: 'from and to must be dates, from first' }, 400);
     const categories = (c.req.queries('category') ?? []).filter((v): v is Category => CATEGORIES.some((known) => known === v));
-    const events: EventView[] = listEvents(store.upcoming(from), labels, {
-      from,
-      to,
-      categories,
-      freeOnly: c.req.query('free') === '1',
-      place,
-    });
+    const events = list({ from, to, categories, freeOnly: c.req.query('free') === '1', withHidden: c.req.query('hidden') === '1' });
     return c.json({ from, to, events });
+  });
+
+  app.get('/api/plans', (c) => c.json({ events: list({ from: day(), to: FAR, savedOnly: true }) }));
+
+  app.get('/api/picks', (c) => c.json(pickEvents(list({ from: day(), to: FAR }), day())));
+
+  app.get('/api/starter', (c) => c.json({ events: starterEvents(list({ from: day(), to: addDays(day(), STARTER_DAYS) }), STARTER_COUNT) }));
+
+  app.put('/api/events/:id/rating', async (c) => {
+    const body = RatingBody.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ error: 'value must be like, dislike, save or null' }, 400);
+    if (!taste.rate(Number(c.req.param('id')), body.data.value)) return c.json({ error: 'no such event' }, 404);
+    return c.json({ ok: true });
+  });
+
+  app.get('/api/events/:id/calendar.ics', (c) => {
+    const id = Number(c.req.param('id'));
+    const event = list({ from: day(), to: FAR, withHidden: true }).find((e) => e.id === id);
+    if (!event) return c.json({ error: 'no such event' }, 404);
+    return c.body(toIcs(event, timeZone, now()), 200, {
+      'content-type': 'text/calendar; charset=utf-8',
+      'content-disposition': `attachment; filename="event-${id}.ics"`,
+    });
+  });
+
+  app.get('/api/taste', (c) => c.json(taste.taste()));
+
+  app.put('/api/taste', async (c) => {
+    const body = TasteBody.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ error: 'seed and profile must be text' }, 400);
+    if (body.data.seed !== undefined) taste.setSeed(body.data.seed.trim());
+    if (body.data.profile !== undefined) taste.editProfile(body.data.profile.trim());
+    return c.json(taste.taste());
+  });
+
+  app.post('/api/taste/rules', async (c) => {
+    const body = RuleBody.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ error: 'a rule needs a text of 2 to 80 characters and always or never' }, 400);
+    store.addRule(body.data.text, body.data.verdict);
+    return c.json(taste.taste());
+  });
+
+  app.delete('/api/taste/rules/:id', (c) => {
+    store.removeRule(Number(c.req.param('id')));
+    return c.json(taste.taste());
+  });
+
+  app.post('/api/taste/refresh', (c) => {
+    void taste.run();
+    return c.json(status(), 202);
   });
 
   app.get('/api/status', (c) => c.json(status()));

@@ -1,24 +1,42 @@
-import type { Category, EventView, Status } from '../../server/contract.ts';
+import type { Category, EventView, Picks, RatingValue, Rule, Status, Taste } from '../../server/contract.ts';
 import type { Range } from './dates.ts';
 
 export interface EventQuery extends Range {
   categories: Category[];
   freeOnly: boolean;
+  withHidden: boolean;
 }
 
 async function json<T>(res: Response): Promise<T> {
-  if (!res.ok) throw new Error(`The app answered ${res.status}`);
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(body?.error ?? `The app answered ${res.status}`);
+  }
   return (await res.json()) as T;
 }
+
+const get = async <T>(path: string, signal?: AbortSignal) => json<T>(await fetch(path, signal ? { signal } : {}));
+
+const send = async <T>(method: string, path: string, body?: unknown) =>
+  json<T>(await fetch(path, body === undefined ? { method } : { method, body: JSON.stringify(body), headers: { 'content-type': 'application/json' } }));
 
 export async function fetchEvents(q: EventQuery, signal: AbortSignal): Promise<EventView[]> {
   const params = new URLSearchParams({ from: q.from, to: q.to });
   for (const c of q.categories) params.append('category', c);
   if (q.freeOnly) params.set('free', '1');
-  const body = await json<{ events: EventView[] }>(await fetch(`/api/events?${params}`, { signal }));
-  return body.events;
+  if (q.withHidden) params.set('hidden', '1');
+  return (await get<{ events: EventView[] }>(`/api/events?${params}`, signal)).events;
 }
 
-export const fetchStatus = async (signal?: AbortSignal) => json<Status>(await fetch('/api/status', signal ? { signal } : {}));
+export const fetchPlans = async (signal: AbortSignal) => (await get<{ events: EventView[] }>('/api/plans', signal)).events;
+export const fetchStarter = async (signal: AbortSignal) => (await get<{ events: EventView[] }>('/api/starter', signal)).events;
+export const fetchPicks = (signal: AbortSignal) => get<Picks>('/api/picks', signal);
+export const fetchTaste = (signal: AbortSignal) => get<Taste>('/api/taste', signal);
+export const fetchStatus = (signal: AbortSignal) => get<Status>('/api/status', signal);
 
-export const requestRefresh = async () => json<Status>(await fetch('/api/refresh', { method: 'POST' }));
+export const requestRefresh = () => send<Status>('POST', '/api/refresh');
+export const requestPicks = () => send<Status>('POST', '/api/taste/refresh');
+export const rate = (eventId: number, value: RatingValue | null) => send<unknown>('PUT', `/api/events/${eventId}/rating`, { value });
+export const saveTaste = (change: { seed?: string; profile?: string }) => send<Taste>('PUT', '/api/taste', change);
+export const addRule = (text: string, verdict: Rule['verdict']) => send<Taste>('POST', '/api/taste/rules', { text, verdict });
+export const removeRule = (id: number) => send<Taste>('DELETE', `/api/taste/rules/${id}`);

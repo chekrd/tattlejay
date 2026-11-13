@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { PLACE } from './config.ts';
 import { openStore } from './db.ts';
 import { ingest } from './ingest.ts';
-import { listEvents } from './listing.ts';
+import { listEvents, NO_OPINIONS } from './listing.ts';
 import type { SourceItem } from './sources/types.ts';
 
 const at = { today: '2026-11-13', now: 1 };
@@ -29,7 +29,7 @@ const item = (over: Partial<SourceItem> & { key: string; title: string }, date =
 });
 
 const listing = (store: ReturnType<typeof openStore>) =>
-  listEvents(store.upcoming('2026-11-13'), labels, { from: '2026-11-13', to: '2027-11-13', categories: [], freeOnly: false, place: PLACE });
+  listEvents(store.upcoming('2026-11-13'), labels, NO_OPINIONS, { from: '2026-11-13', to: '2027-11-13', categories: [], freeOnly: false, place: PLACE });
 
 test('one production listed on several days is one event', () => {
   const store = openStore(':memory:');

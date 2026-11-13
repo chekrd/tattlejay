@@ -23,5 +23,10 @@ export const PLACE: Place = { name: 'Brno', lat: 49.1951, lon: 16.6068, radiusKm
 
 export const POLL_EVERY_MS = 20 * 3_600_000;
 
+export const CLAUDE_COMMAND = process.env.TATTLEJAY_CLAUDE ?? 'claude';
+export const CLAUDE_MODEL = process.env.TATTLEJAY_MODEL ?? 'sonnet';
+export const CLAUDE_CWD = join(DATA_DIR, 'model');
+export const CLAUDE_TIMEOUT_MS = 180_000;
+
 // Outside services get no project or personal name.
 export const USER_AGENT = 'Mozilla/5.0 (compatible; events-reader/0.1)';

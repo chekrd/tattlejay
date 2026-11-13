@@ -13,6 +13,7 @@ export interface PollerDeps {
   place: Place;
   timeZone: string;
   everyMs: number;
+  afterPoll?: () => void;
 }
 
 export function createPoller(store: Store, sources: Source[], deps: PollerDeps) {
@@ -52,6 +53,7 @@ export function createPoller(store: Store, sources: Source[], deps: PollerDeps) 
     run(force = false): Promise<void> {
       running ??= pollAll(force).finally(() => {
         running = null;
+        deps.afterPoll?.();
       });
       return running;
     },

@@ -43,8 +43,11 @@ export function dayLabel(date: string, today: string): string {
 
 const shortDay = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 
+// Not "all day": the source gave a day and nothing more.
+export const NO_TIME = 'Time not given';
+
 export function timeLabel(when: When): string {
-  if (when.startTime === null) return when.endDate > when.startDate ? `until ${shortDay.format(utc(when.endDate))}` : 'All day';
+  if (when.startTime === null) return when.endDate > when.startDate ? `until ${shortDay.format(utc(when.endDate))}` : NO_TIME;
   return when.endTime && when.endDate === when.startDate ? `${when.startTime}–${when.endTime}` : when.startTime;
 }
 

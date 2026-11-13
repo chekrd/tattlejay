@@ -21,7 +21,7 @@ test('time labels', () => {
   assert.equal(timeLabel({ startDate: '2026-11-13', startTime: '19:00', endDate: '2026-11-13', endTime: null }), '19:00');
   assert.equal(timeLabel({ startDate: '2026-11-13', startTime: '19:00', endDate: '2026-11-13', endTime: '21:30' }), '19:00–21:30');
   assert.equal(timeLabel({ startDate: '2026-11-13', startTime: '22:00', endDate: '2026-11-14', endTime: '04:00' }), '22:00');
-  assert.equal(timeLabel({ startDate: '2026-11-13', startTime: null, endDate: '2026-11-13', endTime: null }), 'All day');
+  assert.equal(timeLabel({ startDate: '2026-11-13', startTime: null, endDate: '2026-11-13', endTime: null }), 'Time not given');
   assert.equal(timeLabel({ startDate: '2026-11-01', startTime: null, endDate: '2027-02-14', endTime: null }), 'until 14 Feb');
 });
 

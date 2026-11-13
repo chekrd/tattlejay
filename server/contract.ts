@@ -29,6 +29,17 @@ export interface EventSourceLink {
   url: string;
 }
 
+// Saving is liking plus "I plan to go".
+export const RATING_VALUES = ['like', 'dislike', 'save'] as const;
+export type RatingValue = (typeof RATING_VALUES)[number];
+
+// The text is matched against an event's title and venue.
+export interface Rule {
+  id: number;
+  text: string;
+  verdict: 'always' | 'never';
+}
+
 export interface EventView {
   id: number;
   title: string;
@@ -43,6 +54,18 @@ export interface EventView {
   ongoing: boolean;
   moreDates: number;
   sources: EventSourceLink[];
+  rating: RatingValue | null;
+  // Disliked, or matched by a "never" rule.
+  hidden: boolean;
+  // Null until the taste model has scored the event against the current profile.
+  score: number | null;
+  reason: string | null;
+}
+
+export interface Picks {
+  week: EventView[];
+  month: EventView[];
+  later: EventView[];
 }
 
 export interface SourceStatus {
@@ -53,8 +76,27 @@ export interface SourceStatus {
   lastCount: number | null;
 }
 
+export interface TasteStatus {
+  // A profile exists, so events can be scored.
+  ready: boolean;
+  running: boolean;
+  progress: { done: number; total: number } | null;
+  // Ratings or your own words changed since the profile was built, or events wait to be scored.
+  stale: boolean;
+  lastRunAt: number | null;
+  error: string | null;
+}
+
 export interface Status {
   polling: boolean;
   place: { name: string; radiusKm: number };
   sources: SourceStatus[];
+  taste: TasteStatus;
+}
+
+export interface Taste {
+  seed: string;
+  profile: string;
+  rules: Rule[];
+  rated: number;
 }

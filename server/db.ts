@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync, type SQLOutputValue } from 'node:sqlite';
-import { CATEGORIES, type Category, type When } from './contract.ts';
+import { CATEGORIES, type Category, RATING_VALUES, type RatingValue, type Rule, type When } from './contract.ts';
 import type { SourceItem } from './sources/types.ts';
 
 type Row = Record<string, SQLOutputValue>;
@@ -52,6 +52,34 @@ const MIGRATIONS = [
     last_count INTEGER
   );
   `,
+  // A rating keeps its own copy of what was rated: the event row goes when its source stops listing it, and the taste
+  // profile is built from everything ever rated.
+  `
+  CREATE TABLE rating (
+    event_id INTEGER PRIMARY KEY,
+    value TEXT NOT NULL,
+    at INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    venue TEXT,
+    category TEXT NOT NULL,
+    tags TEXT NOT NULL
+  );
+  CREATE TABLE score (
+    event_id INTEGER PRIMARY KEY REFERENCES event(id) ON DELETE CASCADE,
+    score INTEGER NOT NULL,
+    reason TEXT NOT NULL,
+    profile_version INTEGER NOT NULL
+  );
+  CREATE TABLE rule (
+    id INTEGER PRIMARY KEY,
+    text TEXT NOT NULL,
+    verdict TEXT NOT NULL
+  );
+  CREATE TABLE setting (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
+  `,
 ];
 
 function migrate(db: DatabaseSync) {
@@ -83,12 +111,37 @@ export interface StoredRecord {
   lat: number | null;
   lon: number | null;
   category: Category;
+  tags: string[];
   priceText: string | null;
   isFree: boolean | null;
   url: string;
   description: string | null;
   occurrences: When[];
 }
+
+export interface RatedEvent {
+  value: RatingValue;
+  title: string;
+  venue: string | null;
+  category: Category;
+  tags: string[];
+}
+
+export interface Score {
+  score: number;
+  reason: string;
+}
+
+const tagList = (v: SQLOutputValue | undefined): string[] => {
+  try {
+    const parsed: unknown = JSON.parse(String(v ?? '[]'));
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+};
+
+const ratingValue = (v: SQLOutputValue | undefined): RatingValue => RATING_VALUES.find((known) => known === v) ?? 'like';
 
 export interface Neighbour {
   eventId: number;
@@ -141,8 +194,8 @@ export function openStore(path: string) {
   `);
   const deleteRecord = db.prepare('DELETE FROM record WHERE id = ?');
   const upcoming = db.prepare(`
-    SELECT r.id, r.event_id, r.source, r.title, r.venue, r.address, r.lat, r.lon, r.category, r.price_text, r.is_free,
-      r.url, r.description, o.start_date, o.start_time, o.end_date, o.end_time
+    SELECT r.id, r.event_id, r.source, r.title, r.venue, r.address, r.lat, r.lon, r.category, r.tags, r.price_text,
+      r.is_free, r.url, r.description, o.start_date, o.start_time, o.end_date, o.end_time
     FROM record r JOIN occurrence o ON o.record_id = r.id
     WHERE o.end_date >= ?
     ORDER BY r.event_id, r.id
@@ -154,7 +207,73 @@ export function openStore(path: string) {
       last_ok_at = excluded.last_ok_at, last_error = excluded.last_error, last_count = excluded.last_count
   `);
 
+  const factsOf = db.prepare('SELECT title, venue, category, tags FROM record WHERE event_id = ? ORDER BY id');
+  const upcomingIds = db.prepare(
+    'SELECT DISTINCT r.event_id FROM record r JOIN occurrence o ON o.record_id = r.id WHERE o.end_date >= ?',
+  );
+  const ratings = db.prepare('SELECT event_id, value, title, venue, category, tags FROM rating ORDER BY at');
+  const rate = db.prepare(`
+    INSERT INTO rating (event_id, value, at, title, venue, category, tags) VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT (event_id) DO UPDATE SET value = excluded.value, at = excluded.at, title = excluded.title,
+      venue = excluded.venue, category = excluded.category, tags = excluded.tags
+  `);
+  const unrate = db.prepare('DELETE FROM rating WHERE event_id = ?');
+  const scores = db.prepare('SELECT event_id, score, reason FROM score WHERE profile_version = ?');
+  const saveScore = db.prepare(`
+    INSERT INTO score (event_id, score, reason, profile_version)
+    SELECT ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM event WHERE id = ?)
+    ON CONFLICT (event_id) DO UPDATE SET score = excluded.score, reason = excluded.reason,
+      profile_version = excluded.profile_version
+  `);
+  const rules = db.prepare('SELECT id, text, verdict FROM rule ORDER BY id');
+  const addRule = db.prepare('INSERT INTO rule (text, verdict) VALUES (?, ?)');
+  const removeRule = db.prepare('DELETE FROM rule WHERE id = ?');
+  const setting = db.prepare('SELECT value FROM setting WHERE key = ?');
+  const setSetting = db.prepare('INSERT INTO setting (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value');
+
   return {
+    factsOf(eventId: number) {
+      return factsOf.all(eventId).map((r) => ({ title: String(r.title), venue: text(r.venue), category: category(r.category), tags: tagList(r.tags) }));
+    },
+
+    upcomingIds: (from: string) => upcomingIds.all(from).map((r) => Number(r.event_id)),
+
+    ratings(): Map<number, RatedEvent> {
+      return new Map(
+        ratings.all().map((r) => [
+          Number(r.event_id),
+          { value: ratingValue(r.value), title: String(r.title), venue: text(r.venue), category: category(r.category), tags: tagList(r.tags) },
+        ]),
+      );
+    },
+
+    rate(eventId: number, rated: RatedEvent | null, now: number) {
+      if (rated) rate.run(eventId, rated.value, now, rated.title, rated.venue, rated.category, JSON.stringify(rated.tags));
+      else unrate.run(eventId);
+    },
+
+    scores(profileVersion: number): Map<number, Score> {
+      return new Map(scores.all(profileVersion).map((r) => [Number(r.event_id), { score: Number(r.score), reason: String(r.reason) }]));
+    },
+
+    saveScore(eventId: number, score: Score, profileVersion: number) {
+      saveScore.run(eventId, score.score, score.reason, profileVersion, eventId);
+    },
+
+    rules: (): Rule[] => rules.all().map((r) => ({ id: Number(r.id), text: String(r.text), verdict: r.verdict === 'never' ? 'never' : 'always' })),
+
+    addRule: (text: string, verdict: Rule['verdict']) => Number(addRule.run(text, verdict).lastInsertRowid),
+
+    removeRule(id: number) {
+      removeRule.run(id);
+    },
+
+    setting: (key: string) => text(setting.get(key)?.value),
+
+    setSetting(key: string, value: string) {
+      setSetting.run(key, value);
+    },
+
     transaction<T>(work: () => T): T {
       db.exec('BEGIN');
       try {
@@ -243,6 +362,7 @@ export function openStore(path: string) {
             lat: number(r.lat),
             lon: number(r.lon),
             category: category(r.category),
+            tags: tagList(r.tags),
             priceText: text(r.price_text),
             isFree: r.is_free == null ? null : Number(r.is_free) === 1,
             url: String(r.url),

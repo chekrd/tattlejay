@@ -1,7 +1,9 @@
 import type { Place } from './config.ts';
-import type { Category, EventSourceLink, EventView, When } from './contract.ts';
-import type { StoredRecord } from './db.ts';
+import type { Category, EventSourceLink, EventView, Picks, Rule, When } from './contract.ts';
+import { addDays } from './dates.ts';
+import type { RatedEvent, Score, StoredRecord } from './db.ts';
 import { distanceM } from './geo.ts';
+import { titleKey } from './text.ts';
 
 export interface ListQuery {
   from: string;
@@ -9,7 +11,22 @@ export interface ListQuery {
   categories: Category[];
   freeOnly: boolean;
   place: Place;
+  // Disliked events and those under a "never" rule are left out unless asked for.
+  withHidden?: boolean;
+  savedOnly?: boolean;
 }
+
+// What the person has said about events, laid over the listing.
+export interface Opinions {
+  ratings: Map<number, RatedEvent>;
+  scores: Map<number, Score>;
+  rules: Rule[];
+}
+
+export const NO_OPINIONS: Opinions = { ratings: new Map(), scores: new Map(), rules: [] };
+
+const PICK_FROM_SCORE = 60;
+const PICKS_PER_GROUP = 5;
 
 const isRun = (o: When) => o.startTime === null && o.endDate > o.startDate;
 
@@ -59,7 +76,12 @@ function links(records: StoredRecord[], when: When, labels: Map<string, string>)
   });
 }
 
-function view(records: StoredRecord[], labels: Map<string, string>, q: ListQuery): EventView | undefined {
+function ruleFor(rules: Rule[], title: string, venue: string | null, verdict: Rule['verdict']): Rule | undefined {
+  const haystack = ` ${titleKey(title)} | ${titleKey(venue ?? '')} `;
+  return rules.find((rule) => rule.verdict === verdict && titleKey(rule.text) !== '' && haystack.includes(` ${titleKey(rule.text)} `));
+}
+
+function view(records: StoredRecord[], labels: Map<string, string>, opinions: Opinions, q: ListQuery): EventView | undefined {
   const placed = records.filter((r) => r.lat !== null && r.lon !== null);
   if (placed.length > 0 && !placed.some((r) => distanceM(q.place.lat, q.place.lon, r.lat!, r.lon!) <= q.place.radiusKm * 1000)) return undefined;
 
@@ -73,11 +95,21 @@ function view(records: StoredRecord[], labels: Map<string, string>, q: ListQuery
   const isFree = first(records, (r) => r.isFree);
   if (q.freeOnly && isFree !== true) return undefined;
 
+  const id = records[0]!.eventId;
+  const title = records[0]!.title;
+  const venue = first(records, (r) => r.venue);
+  const rating = opinions.ratings.get(id)?.value ?? null;
+  if (q.savedOnly && rating !== 'save') return undefined;
+  const hidden = rating === 'dislike' || (rating === null && ruleFor(opinions.rules, title, venue, 'never') !== undefined);
+  if (hidden && !q.withHidden) return undefined;
+  const always = ruleFor(opinions.rules, title, venue, 'always');
+  const score = always ? { score: 100, reason: `You asked to always see “${always.text}”.` } : opinions.scores.get(id);
+
   return {
-    id: records[0]!.eventId,
-    title: records[0]!.title,
+    id,
+    title,
     category,
-    venue: first(records, (r) => r.venue),
+    venue,
     address: first(records, (r) => r.address),
     priceText: first(records, (r) => r.priceText),
     isFree,
@@ -86,15 +118,19 @@ function view(records: StoredRecord[], labels: Map<string, string>, q: ListQuery
     ongoing: when.startDate < q.from,
     moreDates: ahead.filter((o) => o !== when && o.startDate >= q.from).length,
     sources: links(records, when, labels),
+    rating,
+    hidden,
+    score: score?.score ?? null,
+    reason: score?.reason ?? null,
   };
 }
 
 // `records` must arrive grouped by event, as Store.upcoming returns them.
-export function listEvents(records: StoredRecord[], labels: Map<string, string>, q: ListQuery): EventView[] {
+export function listEvents(records: StoredRecord[], labels: Map<string, string>, opinions: Opinions, q: ListQuery): EventView[] {
   const events: EventView[] = [];
   let group: StoredRecord[] = [];
   const flush = () => {
-    const event = group.length > 0 ? view(group, labels, q) : undefined;
+    const event = group.length > 0 ? view(group, labels, opinions, q) : undefined;
     if (event) events.push(event);
   };
   for (const r of records) {
@@ -115,4 +151,42 @@ export function listEvents(records: StoredRecord[], labels: Map<string, string>,
       a.title.localeCompare(b.title)
     );
   });
+}
+
+// The strongest matches the person has not rated yet, by how soon they happen. `events` is the listing from today on.
+export function pickEvents(events: EventView[], today: string): Picks {
+  const weekEnd = addDays(today, 6);
+  const monthEnd = addDays(today, 30);
+  const picks: Picks = { week: [], month: [], later: [] };
+  const strongest = events
+    .filter((e) => e.rating === null && !e.hidden && e.score !== null && e.score >= PICK_FROM_SCORE)
+    .sort((a, b) => b.score! - a.score! || a.when.startDate.localeCompare(b.when.startDate));
+  for (const event of strongest) {
+    const group = event.when.startDate <= weekEnd ? picks.week : event.when.startDate <= monthEnd ? picks.month : picks.later;
+    if (group.length < PICKS_PER_GROUP) group.push(event);
+  }
+  return picks;
+}
+
+// A spread of real events to rate first, taking turns between categories so the first ratings say something about each.
+export function starterEvents(events: EventView[], count: number): EventView[] {
+  const byCategory = new Map<Category, EventView[]>();
+  for (const event of events) {
+    if (event.rating !== null || event.hidden || event.ongoing) continue;
+    const group = byCategory.get(event.category);
+    if (group) group.push(event);
+    else byCategory.set(event.category, [event]);
+  }
+  const starters: EventView[] = [];
+  for (let round = 0; starters.length < count; round++) {
+    let took = false;
+    for (const group of byCategory.values()) {
+      const event = group[round];
+      if (!event || starters.length >= count) continue;
+      starters.push(event);
+      took = true;
+    }
+    if (!took) break;
+  }
+  return starters;
 }
