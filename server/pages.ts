@@ -12,6 +12,7 @@ import type { FetchContext, FetchResult, Source, SourceItem } from './sources/ty
 export const CAPTURED = { id: 'captured', label: 'Added by you' };
 
 const KEEP_PREVIEW_MS = 30 * 60_000;
+const ANY_DAY = '0000-01-01';
 
 const hashOf = (text: string) => createHash('sha256').update(text).digest('hex');
 
@@ -119,21 +120,22 @@ export function createPages(store: Store, deps: PagesDeps) {
 
     // Reads one event out of a link, pasted text or a picture, for the person to confirm.
     async capture(from: { url?: string | undefined; text?: string | undefined; picture?: Picture | undefined }): Promise<Capture> {
+      // An event handed over by a person may be over already: they may want it only to say what they thought of it.
       let items: SourceItem[];
       if (from.picture) {
-        items = await eventsInPicture(deps.ask, from.picture, day());
+        items = await eventsInPicture(deps.ask, from.picture, day(), ANY_DAY);
       } else if (from.url) {
         const url = webAddress(from.url);
         const html = await getText(deps.fetch, url);
-        const embedded = embeddedItems(html, url, day());
-        items = embedded.length > 0 ? embedded : await eventsInText(deps.ask, pageText(html, url).text, url, day(), 1);
+        const embedded = embeddedItems(html, url, ANY_DAY);
+        items = embedded.length > 0 ? embedded : await eventsInText(deps.ask, pageText(html, url).text, url, day(), 1, ANY_DAY);
       } else if (from.text?.trim()) {
-        items = await eventsInText(deps.ask, from.text.trim().slice(0, 20_000), null, day(), 1);
+        items = await eventsInText(deps.ask, from.text.trim().slice(0, 20_000), null, day(), 1, ANY_DAY);
       } else {
         throw new Error('give a link, some text or a picture');
       }
       const item = items[0];
-      if (!item) throw new Error('no upcoming event could be read from that');
+      if (!item) throw new Error('no event could be read from that');
       const token = randomUUID();
       forget(captures);
       captures.set(token, { at: deps.now(), item: { ...item, key: hashOf(`${item.key} ${item.occurrences[0]!.startDate}`) } });

@@ -146,7 +146,7 @@ function AddEvent({ today, onChanged }: { today: string; onChanged: () => void }
     found &&
     void addCapture(found.token).then(
       () => {
-        setNote({ warn: false, text: `Added: ${found.event.title}` });
+        setNote({ warn: false, text: `Added: ${found.event.title}. It is in the listing on its date, and under History until you rate it.` });
         setFound(null);
         setText('');
         onChanged();

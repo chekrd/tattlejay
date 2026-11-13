@@ -30,7 +30,7 @@ export async function fetchEvents(q: EventQuery, signal: AbortSignal): Promise<E
 }
 
 export const fetchPlans = async (signal: AbortSignal) => (await get<{ events: EventView[] }>('/api/plans', signal)).events;
-export const fetchHistory = async (signal: AbortSignal) => (await get<{ entries: HistoryEntry[] }>('/api/history', signal)).entries;
+export const fetchHistory = (signal: AbortSignal) => get<{ entries: HistoryEntry[]; unrated: EventView[] }>('/api/history', signal);
 export const fetchStarter = async (signal: AbortSignal) => (await get<{ events: EventView[] }>('/api/starter', signal)).events;
 export const fetchPicks = (placeId: number, signal: AbortSignal) => get<Picks>(`/api/picks?place=${placeId}`, signal);
 export const fetchTaste = (signal: AbortSignal) => get<Taste>('/api/taste', signal);

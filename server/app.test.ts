@@ -111,6 +111,7 @@ test('rating, picks, plans, hidden events and the calendar entry', async () => {
     ['Event a', 'save', '2026-11-14'],
   ]);
   assert.equal((await put(`/api/events/${c}/rating`, { value: null })).status, 200);
+  assert.deepEqual((await get<{ unrated: unknown[] }>('/api/history')).unrated, []);
   assert.equal((await put('/api/events/9999/rating', { value: 'like' })).status, 404);
 
   assert.deepEqual((await get<{ events: { id: number }[] }>('/api/plans')).events.map((e) => e.id), [a]);

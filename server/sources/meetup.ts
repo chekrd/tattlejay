@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TIME_ZONE } from '../config.ts';
-import { localOf } from '../dates.ts';
+import { addDays, localOf } from '../dates.ts';
 import { collapse, titleKey, truncate } from '../text.ts';
 import { getText } from './http.ts';
 import type { FetchContext, FetchResult, Source, SourceItem } from './types.ts';
@@ -45,6 +45,8 @@ const Venue = z.object({ name: z.string().nullish(), address: z.string().nullish
 const State = z.object({ props: z.object({ pageProps: z.object({ __APOLLO_STATE__: z.record(z.string(), z.unknown()) }) }) });
 
 const EMBEDDED = /<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/;
+// A group's page still shows its recent events. They are taken, so the past week can be looked back on.
+const KEEP_PAST_DAYS = 7;
 
 function address(street: string | null | undefined, city: string | null | undefined): string | null {
   if (!street) return city ?? null;
@@ -64,7 +66,7 @@ export function meetupItems(html: string, today: string, city: string): SourceIt
     const e = parsed.data;
     const start = localOf(e.dateTime, TIME_ZONE);
     const venue = Venue.safeParse(e.venue ? state[e.venue.__ref] : undefined);
-    if (!start || start.date < today || !venue.success || e.eventType === 'ONLINE') continue;
+    if (!start || start.date < addDays(today, -KEEP_PAST_DAYS) || !venue.success || e.eventType === 'ONLINE') continue;
     if (!titleKey(venue.data.city ?? '').startsWith(titleKey(city))) continue;
     const end = localOf(e.endTime, TIME_ZONE);
     items.push({

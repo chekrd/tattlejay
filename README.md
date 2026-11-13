@@ -81,7 +81,8 @@ it gave last time and says what went wrong.
   changed. You see what was found before the page is added; after that it is read once a day. Národní divadlo,
   Filharmonie, JIC, Masarykova univerzita, RHK Brno and Kudy z nudy come added this way, and can be removed.
 - **Add one event**: paste a link or the event's text, or paste or drop a screenshot or poster. This is the way in
-  for Facebook and Instagram, which cannot be read automatically. The picture is read by the CLI's file-reading tool
+  for Facebook and Instagram, which cannot be read automatically. The event may already be over, if you only want
+  to say what you thought of it; until you rate it, it waits at the top of **History**. The picture is read by the CLI's file-reading tool
   in a folder that holds nothing else.
 
 A page added by address gives its nearest events only (whatever one page shows), and an event read by the model has

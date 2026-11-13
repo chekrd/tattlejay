@@ -111,7 +111,18 @@ test('one event is captured from text, a link or a picture, and added only when 
   await assert.rejects(pages.capture({}), /give a link, some text or a picture/);
 });
 
+test('an event that is already over can be captured, from a page that embeds it', async () => {
+  const ld = `<script type="application/ld+json">${JSON.stringify({ '@type': 'Event', name: 'AI 4 DEV @ Brno', startDate: '2026-11-12T18:00:00+01:00', endDate: '2026-11-12T21:00:00+01:00', location: { name: 'U Lucerny' } })}</script>`;
+  const { store, pages, asked } = setup({ 'https://meetup.test/events/1/': `<title>AI 4 DEV</title>${ld}` }, () => '[]');
+  const captured = await pages.capture({ url: 'https://meetup.test/events/1/' });
+  assert.deepEqual(captured.event.when, { startDate: '2026-11-12', startTime: '18:00', endDate: '2026-11-12', endTime: '21:00' });
+  assert.equal(asked.length, 0);
+  pages.addCapture(captured.token);
+  const lastWeek = listEvents(store.upcoming('2026-11-06'), new Map([[CAPTURED.id, CAPTURED.label]]), NO_OPINIONS, { from: '2026-11-06', to: '2026-11-12', categories: [], freeOnly: false, place: HOME });
+  assert.deepEqual(lastWeek.map((e) => [e.title, e.venue]), [['AI 4 DEV @ Brno', 'U Lucerny']]);
+});
+
 test('a capture with nothing in it says so', async () => {
   const { pages } = setup({}, () => '[]');
-  await assert.rejects(pages.capture({ text: 'hello' }), /no upcoming event could be read/);
+  await assert.rejects(pages.capture({ text: 'hello' }), /no event could be read/);
 });

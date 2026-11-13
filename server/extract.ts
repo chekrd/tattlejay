@@ -78,6 +78,12 @@ function span(start: string | null, end: string | null): When | undefined {
   return { startDate: from.date, startTime: from.time, endDate: to && to.date > from.date ? to.date : from.date, endTime: to?.time ?? null };
 }
 
+// Some pages already put the town in the street line.
+function streetAndTown(street: string | null, town: string | null): string | null {
+  if (!street) return town;
+  return town && !street.includes(town) ? `${street}, ${town}` : street;
+}
+
 const record = (value: unknown): Record<string, unknown> => (value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {});
 
 // Groups dated entries that share a title into one item with all its dates, as a series or a film's showtimes.
@@ -118,7 +124,7 @@ export function embeddedItems(html: string, base: string, today: string): Source
     entries.push({
       title: collapse(plainText(title)),
       venue: str(location.name) ? collapse(plainText(str(location.name)!)) : null,
-      address: str(location.address) ?? ([str(address.streetAddress), str(address.addressLocality)].filter(Boolean).join(', ') || null),
+      address: str(location.address) ?? streetAndTown(str(address.streetAddress), str(address.addressLocality)),
       lat: Number.isFinite(Number(geo.latitude)) && geo.latitude != null ? Number(geo.latitude) : null,
       lon: Number.isFinite(Number(geo.longitude)) && geo.longitude != null ? Number(geo.longitude) : null,
       category: BY_TYPE.find(([type]) => type.test(types))?.[1] ?? 'Other',
@@ -200,14 +206,15 @@ export interface Read {
 
 const asked = (what: string, today: string, limit: number) => `Today is ${today}. ${what} List at most ${limit} events, soonest first.`;
 
-export const eventsInText = async (ask: Ask, text: string, source: string | null, today: string, limit = MAX_EVENTS) =>
-  parseFound(await ask(`${asked(source ? `This is the text of the page ${source}.` : 'This text was pasted by a person.', today, limit)}\n\n${text}`, SYSTEM), source, today);
+// `since` is the earliest day an event may end on: today for a programme, any day for an event a person hands over.
+export const eventsInText = async (ask: Ask, text: string, source: string | null, today: string, limit = MAX_EVENTS, since = today) =>
+  parseFound(await ask(`${asked(source ? `This is the text of the page ${source}.` : 'This text was pasted by a person.', today, limit)}\n\n${text}`, SYSTEM), source, since);
 
-export const eventsInPicture = async (ask: Ask, picture: Picture, today: string) =>
+export const eventsInPicture = async (ask: Ask, picture: Picture, today: string, since = today) =>
   parseFound(
     await ask(asked(`Read the image file ${PICTURE_NAME}.${picture.extension} in the current folder. It is a poster, a post or a screenshot about an event.`, today, 3), SYSTEM, picture),
     null,
-    today,
+    since,
   );
 
 // Reads the events off a page: from its embedded data when it has any, otherwise by the model.

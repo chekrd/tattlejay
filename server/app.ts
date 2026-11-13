@@ -27,6 +27,7 @@ export interface AppDeps {
 
 const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost']);
 const FAR = '9999-12-31';
+const ANY_DAY = '0000-01-01';
 const STARTER_COUNT = 30;
 const STARTER_DAYS = 60;
 
@@ -134,7 +135,12 @@ export function createApp({ store, poller, taste, pages, visits, sources, timeZo
     });
   });
 
-  app.get('/api/history', (c) => c.json({ entries: taste.history() }));
+  // Besides what was rated: events the person added themselves and has not rated, however long ago they were, since
+  // an old one shows nowhere else.
+  app.get('/api/history', (c) => {
+    const added = list({ from: ANY_DAY, to: FAR, place: null }).filter((e) => e.rating === null && e.sources.some((s) => s.source === CAPTURED.id));
+    return c.json({ entries: taste.history(), unrated: added });
+  });
 
   app.get('/api/taste', (c) => c.json(taste.taste()));
 

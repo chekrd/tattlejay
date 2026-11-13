@@ -69,7 +69,7 @@ test('Brno.AI: in-person events in or by Brno, with midnight read as a day', () 
   ]);
 });
 
-test('Meetup: upcoming events with a venue in the city', () => {
+test('Meetup: upcoming and just-past events with a venue in the city', () => {
   const event = (id: string, title: string, dateTime: string, venue: string | null, eventType = 'PHYSICAL') => ({
     __typename: 'Event',
     id,
@@ -89,14 +89,16 @@ test('Meetup: upcoming events with a venue in the city', () => {
     'Event:3': event('3', 'Old', '2026-08-12T18:00:00+02:00', 'Venue:1'),
     'Event:4': event('4', 'Online', '2026-11-19T18:00:00+01:00', null, 'ONLINE'),
     'Event:5': event('5', 'Frontendisti', '2026-11-20T18:00:00+01:00', 'Venue:3'),
+    'Event:6': event('6', 'Last week', '2026-11-10T18:00:00+01:00', 'Venue:1'),
   };
   const html = `<script id="__NEXT_DATA__" type="application/json">${JSON.stringify({ props: { pageProps: { __APOLLO_STATE__: state } } })}</script>`;
   const items = meetupItems(html, TODAY, 'Brno');
   assert.deepEqual(brief(items), [
     ['AI 4 DEV @ Brno', 'Restarace U Lucerny', [at('2026-11-18', '18:00', '21:00')]],
     ['Frontendisti', 'Music Lab', [at('2026-11-20', '18:00', '21:00')]],
+    ['Last week', 'Restarace U Lucerny', [at('2026-11-10', '18:00', '21:00')]],
   ]);
-  assert.deepEqual(items.map((i) => i.address), ['Veveří 20, Brno', 'Opletalova 1, Brno-město']);
+  assert.deepEqual(items.map((i) => i.address), ['Veveří 20, Brno', 'Opletalova 1, Brno-město', 'Veveří 20, Brno']);
   assert.throws(() => meetupItems('<html>blocked</html>', TODAY, 'Brno'), /no event data/);
 });
 
