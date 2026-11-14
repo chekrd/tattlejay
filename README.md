@@ -1,110 +1,39 @@
 # Tattlejay
 
-What's on in Brno, from every source in one list. A private, single-user app that runs on your Mac.
+What's on in Brno, from every source in one list, with picks chosen for your taste. A single-user app that runs on
+your Mac.
+
+Brno's events are scattered across the city's open-data feed, GoOut, theatres, cinemas, Meetup, Luma and a dozen
+community calendars. Tattlejay reads them all once a day, merges entries that are sure to be the same event, and lists
+what's on by date, category and price.
+
+## Picks
+
+Like, dislike or save events, and say in your own words what you like. From that the app keeps a short taste profile,
+which you can read and edit, and scores every upcoming event against it. The best unrated matches show as
+**Picked for you**, each with its reason. Rules can always show or always hide a venue or performer.
+
+**Past 7 days** lets you rate what you went to, and **History** keeps every reaction, even after the event is gone.
+
+The profile and the scores are written by the Claude CLI (`claude -p`) under your own login.
+
+## Beyond the built-in sources
+
+- **Add a source**: paste the address of any programme page. Its events are read from the structured data it
+  publishes, or by the model from its text, and you see what was found before adding it.
+- **Add one event**: paste a link, the event's text, or a screenshot or poster. This is the way in for Facebook and
+  Instagram, and it works for events that are already over, so you can rate them.
+- **Online**: online-only events get a tab of their own, with their own picks.
+- **Another city**: name a city and the app reads what GoOut, and Kudy z nudy for the Czech regional capitals, list
+  there over the next month, scored against your taste.
 
 ## Run it
 
 ```sh
 pnpm install
-pnpm start        # builds the page, then serves it on http://127.0.0.1:7440
-```
-
-On start it reads every source that has not been read in the last 20 hours, and looks again every half hour while it
-runs. The Refresh button reads them all now.
-
-The database lives in `~/Library/Application Support/tattlejay/tattlejay.db`. Set `TATTLEJAY_DATA_DIR` to keep it
-elsewhere and `TATTLEJAY_PORT` to change the port.
-
-## Picks
-
-Like, dislike or save events, and say what you like in your own words under **My taste**. From those the app keeps a
-short written taste profile, which you can read and edit, and scores every upcoming event against it. The strongest
-unrated matches show as **Picked for you**, each with its reason.
-
-**Past 7 days** in the listing shows what was on over the last week, latest day first, so you can rate what you went
-to. It can only show events the app had already read before they happened, so it fills up as the app is used.
-**History** lists every event you have reacted to, latest reaction first, and stays complete after an event is over or
-its source has dropped it; a reaction can be changed or taken back there.
-
-The writing and scoring are done by the Claude CLI (`claude -p`) under your own login, on Sonnet, as a plain
-completion: no tools, no settings, no plugins, run from an empty folder of the app's own. It runs once a day after the
-sources are read, and when you press **Refresh my picks**. A full scoring pass sends about one call per 50 events.
-If the CLI fails, the listing keeps working and the page says what went wrong.
-
-`TATTLEJAY_CLAUDE` names the CLI to run (default `claude`) and `TATTLEJAY_MODEL` the model (default `sonnet`).
-
-## Work on it
-
-```sh
-pnpm serve        # the server alone, on :7440
-pnpm dev          # the page with hot reload on :5174, talking to the server
+pnpm start        # http://127.0.0.1:7440
 pnpm check        # types, lint, tests
 ```
 
-## How it fits together
-
-- `server/sources/` holds one adapter per source. Each turns its feed into items: a title, a place, a category and the
-  days (and times, when known) it happens.
-- `server/ingest.ts` stores the items and decides which ones are the same event. It merges only when sure: same title
-  at the same place, or two sources agreeing on a shared day. An unsure pair stays as two entries.
-- `server/listing.ts` builds what the page shows: one entry per event with its next date in the chosen range, the most
-  precise time any source gave, and a link to each source. It also lays your ratings, rules and scores over the events
-  and chooses the picks.
-- `server/taste.ts` keeps the taste profile and the scores; `server/model.ts` is the only place that calls the CLI.
-- `server/extract.ts` reads events off any page or text; `server/pages.ts` keeps the pages you added and the events
-  you captured.
-- `web/` is the page.
-
-## Sources
-
-| Source | How it is read | Notes |
-| --- | --- | --- |
-| gotobrno.cz | the city's open data feed (CC BY) | days but no start times |
-| GoOut | the endpoint its own pages call | facts only: title, time, venue, price, link |
-| Městské divadlo Brno | its programme API | one entry per production |
-| Kino Scala | events embedded in its front page | one entry per film |
-| Kino Art | its programme page | one entry per film |
-| Impact Hub Brno | its calendar API | |
-| Meetup | each listed group's events page | groups are listed in `server/sources/meetup.ts` |
-| Meetup online | Meetup's search, online events, one page per topic | online events only |
-| Luma | calendar subscriptions | communities are listed in `server/sources/calendars.ts` |
-| Brno.AI | events embedded in its listing | only in-person events in or by Brno |
-| Pyvo, WUG Brno, Base48 | their calendar feeds | Base48's own meetings are left out |
-| Brno Expat Centre | its events feed | |
-
-The **Sources** view shows when each was last read and how many events it gave. A source that fails keeps the events
-it gave last time and says what went wrong.
-
-### Adding your own
-
-- **Add a source**: paste the address of a programme or events page. If the page publishes its events as structured
-  data, they are read from that. Otherwise the model reads the page text, and reads it again only when the text has
-  changed. You see what was found before the page is added; after that it is read once a day. Národní divadlo,
-  Filharmonie, JIC, Masarykova univerzita, RHK Brno and Kudy z nudy come added this way, and can be removed.
-- **Add one event**: paste a link or the event's text, or paste or drop a screenshot or poster. This is the way in
-  for Facebook and Instagram, which cannot be read automatically. The event may already be over, if you only want
-  to say what you thought of it; until you rate it, it waits at the top of **History**. The picture is read by the CLI's file-reading tool
-  in a folder that holds nothing else.
-
-A page added by address gives its nearest events only (whatever one page shows), and an event read by the model has
-no map position unless its venue is already known from another source.
-
-### Online events
-
-Online-only events have a tab of their own, **Online**, with its own picks; they never appear in What's on or its
-picks, and the place menu does not apply to them. They come from Meetup's online search near Brno (one page per
-topic, about 160 events at a time, mostly international and in English), from the online events of the Meetup groups,
-Brno.AI and Impact Hub, and from pasted pages and captures that say an event is online. They are scored against the
-same taste profile, so expect a few more model calls when picks are made.
-
-### Another city
-
-The place menu under the title has **Another city…**. Name one and the app reads, once and on the spot, what the
-sources that cover many cities list for it over the next month: GoOut, wherever it has events, and Kudy z nudy for
-the Czech regional capitals. The events are scored against your taste and the listing switches to that city; the
-menu switches back. A city stays in the menu, and looking at it again refreshes it.
-
-Other cities get no sources of their own, so expect less there than at home.
-
-The GoOut and Meetup adapters read data those sites embed for their own pages, not a published API. Keep this app
-private.
+`TATTLEJAY_DATA_DIR` and `TATTLEJAY_PORT` change where the database lives (default
+`~/Library/Application Support/tattlejay`) and the port.
